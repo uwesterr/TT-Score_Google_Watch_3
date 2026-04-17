@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Snake</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="frame">
+    <header class="top-bar">
+      <div class="title">
+        <span class="dot"></span>
+        <h1>Snake</h1>
+      </div>
+      <div class="stats" aria-live="polite">
+        <span id="score">Score: 0</span>
+        <span id="status" class="status">Running</span>
+      </div>
+    </header>
+
+    <section class="game-area">
+      <canvas id="board" width="400" height="400" role="img" aria-label="Snake board"></canvas>
+      <div class="controls" aria-label="On-screen controls">
+        <div class="row">
+          <button data-dir="up">↑</button>
+        </div>
+        <div class="row">
+          <button data-dir="left">←</button>
+          <button data-dir="down">↓</button>
+          <button data-dir="right">→</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button id="restart">Restart</button>
+      <button id="pause">Pause</button>
+    </div>
+    <p class="hint">Arrow keys or WASD to move. Space toggles pause. Reach the food, avoid walls and yourself.</p>
+  </main>
+
+  <script type="module" src="./src/game.mjs"></script>
+</body>
+</html>
