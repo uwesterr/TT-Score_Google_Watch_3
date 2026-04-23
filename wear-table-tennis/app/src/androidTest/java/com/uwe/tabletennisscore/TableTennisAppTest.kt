@@ -24,14 +24,14 @@ class TableTennisAppTest {
         composeTestRule.onNodeWithTag("serveUwe").performClick()
         composeTestRule.onNodeWithTag("pointUwe").performClick()
 
-        composeTestRule.onNodeWithContentDescription("Uwe score 1").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Me score 1").assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription("Opponent score 0").assertIsDisplayed()
     }
 
     @Test
     fun serverIndicatorChangesAfterTwoPoints() {
         composeTestRule.onNodeWithTag("serveUwe").performClick()
-        composeTestRule.onNodeWithText("Serving: Uwe").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Serving: Me").assertIsDisplayed()
 
         composeTestRule.onNodeWithTag("pointUwe").performClick()
         composeTestRule.onNodeWithTag("pointOpponent").performClick()
@@ -62,6 +62,6 @@ class TableTennisAppTest {
         repeat(11) { composeTestRule.onNodeWithTag("pointUwe").performClick() }
 
         composeTestRule.onNodeWithTag("matchOver").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Uwe wins").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Me wins").assertIsDisplayed()
     }
 }

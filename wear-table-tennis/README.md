@@ -1,6 +1,6 @@
 # TT Score for Wear OS
 
-Native Wear OS table-tennis scorer for Uwe vs Opponent.
+Native Wear OS table-tennis scorer for Me vs Opponent.
 
 ## Match Rules
 

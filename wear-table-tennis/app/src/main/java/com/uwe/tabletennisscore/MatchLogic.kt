@@ -1,7 +1,7 @@
 package com.uwe.tabletennisscore
 
 enum class Player(val label: String, val code: String) {
-    UWE("Uwe", "U"),
+    UWE("Me", "U"),
     OPPONENT("Opponent", "O");
 
     fun other(): Player = if (this == UWE) OPPONENT else UWE

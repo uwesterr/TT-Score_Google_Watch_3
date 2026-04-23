@@ -120,7 +120,7 @@ private fun ServePromptScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ActionButton(
-                label = "Uwe",
+                label = "Me",
                 modifier = Modifier
                     .weight(1f)
                     .testTag("serveUwe"),
