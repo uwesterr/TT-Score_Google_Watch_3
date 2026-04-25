@@ -55,8 +55,7 @@ class MatchLogicTest {
         assertNull(state.matchWinner)
 
         state = MatchRules.startNextSet(state)
-        assertNull(state.currentSet.firstServer)
-        state = MatchRules.chooseFirstServer(state, Player.OPPONENT)
+        assertEquals(Player.OPPONENT, state.currentSet.firstServer)
         repeat(11) { state = MatchRules.addPoint(state, Player.UWE) }
 
         assertEquals(Player.UWE, state.matchWinner)
@@ -65,16 +64,19 @@ class MatchLogicTest {
     }
 
     @Test
-    fun everyNewSetRequiresFirstServerChoice() {
+    fun nextSetAutomaticallyAlternatesStartingServer() {
         var state = MatchRules.chooseFirstServer(MatchState(), Player.UWE)
         repeat(11) { state = MatchRules.addPoint(state, Player.OPPONENT) }
 
         state = MatchRules.startNextSet(state)
 
-        assertNull(state.currentSet.firstServer)
-        val unchanged = MatchRules.addPoint(state, Player.UWE)
-        assertEquals(0, unchanged.currentSet.uwePoints)
-        assertEquals(0, unchanged.currentSet.opponentPoints)
+        assertEquals(Player.OPPONENT, state.currentSet.firstServer)
+        assertEquals(Player.OPPONENT, MatchRules.currentServer(state.currentSet))
+
+        state = MatchRules.addPoint(state, Player.UWE)
+
+        assertEquals(1, state.currentSet.uwePoints)
+        assertEquals(0, state.currentSet.opponentPoints)
     }
 
     @Test

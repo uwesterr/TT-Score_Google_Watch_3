@@ -89,8 +89,9 @@ object MatchRules {
 
     fun startNextSet(state: MatchState): MatchState {
         if (state.matchWinner != null || state.currentSet.winner == null) return state
+        val nextFirstServer = state.currentSet.firstServer?.other()
         return state.copy(
-            sets = state.sets + SetScore(),
+            sets = state.sets + SetScore(firstServer = nextFirstServer),
             currentSetIndex = state.currentSetIndex + 1,
         )
     }

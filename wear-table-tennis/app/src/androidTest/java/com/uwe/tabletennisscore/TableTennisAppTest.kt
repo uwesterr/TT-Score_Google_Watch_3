@@ -58,7 +58,7 @@ class TableTennisAppTest {
 
         composeTestRule.onNodeWithTag("setComplete").assertIsDisplayed()
         composeTestRule.onNodeWithTag("nextSet").performClick()
-        composeTestRule.onNodeWithTag("serveOpponent").performClick()
+        composeTestRule.onNodeWithText("Serving: Opponent").assertIsDisplayed()
         repeat(11) { composeTestRule.onNodeWithTag("pointUwe").performClick() }
 
         composeTestRule.onNodeWithTag("matchOver").assertIsDisplayed()

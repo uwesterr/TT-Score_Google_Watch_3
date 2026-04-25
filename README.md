@@ -12,7 +12,8 @@ Wear OS table-tennis scoring app for fast point tracking during real matches.
 - Serve rules:
   - service changes every 2 points before deuce
   - at 10-10 and above, service changes every point
-- At the start of each set, the app asks who serves first.
+- At the start of the match, the app asks who serves first in set 1.
+- In later sets, first serve switches automatically to the player who did not start the previous set.
 - Main scoring screen shows:
   - current points (`Me` vs `Opponent`)
   - current server
