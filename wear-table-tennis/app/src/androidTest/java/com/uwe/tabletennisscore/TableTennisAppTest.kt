@@ -1,7 +1,9 @@
 package com.uwe.tabletennisscore
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -63,5 +65,17 @@ class TableTennisAppTest {
 
         composeTestRule.onNodeWithTag("matchOver").assertIsDisplayed()
         composeTestRule.onNodeWithText("Me wins").assertIsDisplayed()
+    }
+
+    @Test
+    fun nextSetStartsImmediatelyWithOppositeStartingServer() {
+        composeTestRule.onNodeWithTag("serveUwe").performClick()
+        repeat(11) { composeTestRule.onNodeWithTag("pointUwe").performClick() }
+
+        composeTestRule.onNodeWithTag("nextSet").performClick()
+
+        composeTestRule.onNodeWithTag("scoreScreen").assertIsDisplayed()
+        composeTestRule.onAllNodesWithTag("servePrompt").assertCountEquals(0)
+        composeTestRule.onNodeWithText("Serving: Opponent").assertIsDisplayed()
     }
 }

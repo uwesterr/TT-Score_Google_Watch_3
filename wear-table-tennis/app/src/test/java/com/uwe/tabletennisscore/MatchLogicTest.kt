@@ -84,7 +84,6 @@ class MatchLogicTest {
         var state = MatchRules.chooseFirstServer(MatchState(), Player.UWE)
         repeat(11) { state = MatchRules.addPoint(state, Player.UWE) }
         state = MatchRules.startNextSet(state)
-        state = MatchRules.chooseFirstServer(state, Player.OPPONENT)
         repeat(10) { state = MatchRules.addPoint(state, Player.UWE) }
         state = MatchRules.addPoint(state, Player.UWE)
 

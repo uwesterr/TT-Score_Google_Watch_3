@@ -1,4 +1,4 @@
-# TT-Score Google Watch 3
+# TT Score for Wear OS Watches
 
 Wear OS table-tennis scoring app for fast point tracking during real matches.
 
@@ -24,6 +24,7 @@ Wear OS table-tennis scoring app for fast point tracking during real matches.
   - `Undo`
   - `New` (reset match during play)
 - Keeps the watch display on while the app is in the foreground.
+- Shared large-round layout tuned for both Pixel Watch 3 and Samsung Galaxy Watch7 44mm (`SM-L310`).
 
 ## Requirements
 
@@ -33,10 +34,13 @@ Wear OS table-tennis scoring app for fast point tracking during real matches.
   - Wear OS emulator image (if testing in emulator)
 - Java 17 runtime (Android Studio bundled JBR works).
 - For physical watch install:
-  - Google Pixel Watch 3
+  - Wear OS watch
+  - Tested target sizes:
+    - Google Pixel Watch 3
+    - Samsung Galaxy Watch7 44mm (`SM-L310`)
   - Developer options enabled on watch
   - ADB debugging enabled
-  - Wireless debugging enabled
+  - Wireless debugging enabled (`Debug over Wi-Fi` on some Samsung One UI builds)
   - Watch and computer on the same Wi-Fi network
 
 ## Install And Run (Step By Step)
@@ -62,7 +66,37 @@ cd TT-Score_Google_Watch_3/wear-table-tennis
 3. Select the emulator in the run target dropdown.
 4. Run the `app` configuration.
 
-### 4) Run on a real Pixel Watch 3 (wireless ADB)
+### 4) Run on a real Wear OS watch (wireless ADB)
+
+#### Option A: Samsung Galaxy Watch7 44mm (`SM-L310`)
+
+On the watch:
+
+1. Wake the watch and open `Settings`.
+2. Tap `Connections`.
+3. Tap `Wi-Fi`.
+4. Turn Wi-Fi on if needed.
+5. Choose the same Wi-Fi network the computer is using.
+6. Enter the Wi-Fi password if prompted.
+7. Go back to the main `Settings` screen.
+8. Tap `About watch`.
+9. Tap `Software`.
+10. Tap `Software version` 5 times.
+11. Wait for the toast confirming Developer options are enabled.
+12. Go back to `Settings`.
+13. Tap `Developer options`.
+14. Turn on `ADB debugging`.
+15. Confirm the warning prompt if one appears.
+16. Turn on `Wireless debugging` or `Debug over Wi-Fi` (Samsung wording varies by One UI version).
+17. Tap the wireless debugging entry itself.
+18. Tap `Pair new device` or `Pair device with pairing code`.
+19. Keep that screen open.
+20. Note the following from the watch:
+    - the pairing IP address and port
+    - the 6-digit pairing code
+21. After pairing is complete, go back one screen and note the normal connection IP address and port shown for wireless debugging.
+
+#### Option B: Google Pixel Watch 3
 
 On watch:
 
@@ -73,29 +107,47 @@ On watch:
 5. Enable `Wireless debugging`.
 6. Open `Pair new device` and note pairing code.
 
-On computer (Terminal):
+#### Pair and install from the computer
+
+On the computer:
+
+1. Open `Terminal`.
+2. Change into the Wear project folder:
+
+```bash
+cd /Users/uwesterr/Documents/New\ project/wear-table-tennis
+```
+
+3. Define the local ADB path:
 
 ```bash
 ADB="/Users/uwesterr/Library/Android/sdk/platform-tools/adb"
+```
+
+4. Ask ADB to discover the watch:
+
+```bash
 $ADB mdns services
 ```
 
-Use the current `_adb-tls-pairing._tcp` IP:port from that output:
+5. In the output, find the current `_adb-tls-pairing._tcp` entry for the watch and use that IP:port for pairing:
 
 ```bash
 $ADB pair <PAIRING_IP:PAIRING_PORT>
 ```
 
-Enter the 6-digit code shown on watch.
-
-Then connect using the `_adb-tls-connect._tcp` IP:port:
+6. When Terminal asks for `Enter pairing code:`, type the 6-digit code from the watch and press Enter.
+7. Wait for the `Successfully paired` message.
+8. Back in the watch's wireless debugging screen, find the regular connection IP:port.
+9. Connect to the watch:
 
 ```bash
 $ADB connect <CONNECT_IP:CONNECT_PORT>
 $ADB devices
 ```
 
-Install app:
+10. Confirm the watch appears in the `adb devices` list as `device`.
+11. Install the app:
 
 ```bash
 env JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
@@ -103,11 +155,33 @@ ANDROID_SERIAL="<CONNECT_IP:CONNECT_PORT>" \
 ./gradlew :app:installDebug
 ```
 
-Launch app:
+12. Launch the app:
 
 ```bash
 $ADB -s <CONNECT_IP:CONNECT_PORT> shell am start -n com.uwe.tabletennisscore/.MainActivity
 ```
+
+13. The app should open on the watch on the `Serve first?` screen.
+
+If the watch does not connect the first time:
+
+1. Make sure the watch and computer are still on the same Wi-Fi.
+2. Turn `Wireless debugging` off and back on on the watch.
+3. Open `Pair new device` again.
+4. Use the fresh pairing port and fresh 6-digit code.
+5. Ignore stale ports shown in old Android Studio popups and use the current values from the watch or `adb mdns services`.
+
+### 5) Manual smoke test on the watch
+
+1. Launch the app.
+2. Choose who serves first in set 1.
+3. Tap both scoring buttons and confirm points update immediately.
+4. Confirm service changes every 2 points before `10-10`.
+5. Get to `10-10` and confirm service changes every point.
+6. Finish set 1, tap `Next set`, and confirm set 2 starts immediately with the opposite starting server.
+7. Test `Undo`.
+8. Test `New`.
+9. Confirm the screen stays on while the app is active in the foreground.
 
 ## Build And Test
 

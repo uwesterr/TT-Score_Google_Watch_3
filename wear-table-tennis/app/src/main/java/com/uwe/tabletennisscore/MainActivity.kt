@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -62,7 +63,7 @@ fun TableTennisApp() {
             modifier = Modifier
                 .fillMaxSize()
                 .background(AppColors.background)
-                .padding(horizontal = 20.dp, vertical = 18.dp),
+                .padding(horizontal = 18.dp, vertical = 16.dp),
             contentAlignment = Alignment.Center,
         ) {
             when {
@@ -283,26 +284,28 @@ private fun HeaderRow(
     onNewMatch: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.width(148.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         StatusPill(text = "${state.uweSetsWon}-${state.opponentSetsWon}")
-        GhostButton(
-            label = "Undo",
-            enabled = state.undoStack.isNotEmpty(),
-            modifier = Modifier
-                .width(50.dp)
-                .testTag("undoPoint"),
-            onClick = onUndo,
-        )
-        GhostButton(
-            label = "New",
-            modifier = Modifier
-                .width(44.dp)
-                .testTag("newMatchDuringPlay"),
-            onClick = onNewMatch,
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            GhostButton(
+                label = "Undo",
+                enabled = state.undoStack.isNotEmpty(),
+                modifier = Modifier
+                    .widthIn(min = 50.dp)
+                    .testTag("undoPoint"),
+                onClick = onUndo,
+            )
+            GhostButton(
+                label = "New",
+                modifier = Modifier
+                    .widthIn(min = 44.dp)
+                    .testTag("newMatchDuringPlay"),
+                onClick = onNewMatch,
+            )
+        }
     }
 }
 
@@ -311,7 +314,7 @@ private fun ServerIndicator(server: Player?) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(30.dp)
+            .height(28.dp)
             .clip(CircleShape)
             .background(AppColors.surface)
             .semantics { contentDescription = "Serving: ${server?.label ?: "Not selected"}" }
@@ -321,7 +324,7 @@ private fun ServerIndicator(server: Player?) {
         Text(
             text = "Serving: ${server?.label ?: "-"}",
             color = AppColors.text,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
         )
@@ -333,7 +336,7 @@ private fun ScoreBoard(set: SetScore, server: Player?) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(62.dp),
+            .height(60.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         ScoreColumn(Player.UWE, set.uwePoints, server == Player.UWE, Modifier.weight(1f))
@@ -371,7 +374,7 @@ private fun ScoreColumn(
         Text(
             text = points.toString(),
             color = AppColors.text,
-            fontSize = 30.sp,
+            fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
         )
@@ -388,7 +391,7 @@ private fun PointButton(
     val color = if (player == Player.UWE) AppColors.uwe else AppColors.opponent
     Box(
         modifier = modifier
-            .height(62.dp)
+            .height(60.dp)
             .semantics { contentDescription = "Point for ${player.label}" }
             .clip(RoundedCornerShape(8.dp))
             .background(color)
@@ -399,7 +402,7 @@ private fun PointButton(
             Text(
                 text = "+ ${if (player == Player.OPPONENT) "Opp" else player.label}",
                 color = AppColors.darkText,
-                fontSize = 16.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
             )
@@ -421,7 +424,7 @@ private fun ActionButton(
 ) {
     Box(
         modifier = modifier
-            .height(50.dp)
+            .height(48.dp)
             .clip(CircleShape)
             .background(color)
             .clickable(onClick = onClick)
@@ -431,7 +434,7 @@ private fun ActionButton(
         Text(
             text = label,
             color = AppColors.darkText,
-            fontSize = 15.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             maxLines = 1,
@@ -504,6 +507,7 @@ private object AppColors {
 }
 
 @Preview(device = Devices.WEAR_OS_SMALL_ROUND, showSystemUi = true)
+@Preview(device = Devices.WEAR_OS_LARGE_ROUND, showSystemUi = true)
 @Composable
 private fun ScorePreview() {
     TableTennisTheme {

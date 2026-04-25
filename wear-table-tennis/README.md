@@ -9,7 +9,8 @@ Native Wear OS table-tennis scorer for Me vs Opponent.
 - A set must be won by 2 points.
 - Service changes every 2 points before 10-10.
 - From 10-10 onward, service changes every point.
-- The app asks who serves first at the start of every set.
+- The app asks who serves first in set 1.
+- Later sets automatically alternate the starting server.
 
 ## Project
 
@@ -26,7 +27,7 @@ Open this folder in Android Studio:
 wear-table-tennis/
 ```
 
-Then select a Wear OS emulator or connected Pixel/Google Watch and run the `app` configuration.
+Then select a Wear OS emulator or connected Pixel Watch / Samsung Galaxy Watch and run the `app` configuration.
 
 ## Test
 
