@@ -2,8 +2,11 @@
 
 Wear OS table-tennis scoring app for fast point tracking during real matches.
 
+This app was written with Codex.
+
 ![TT Score Wear OS Emulator Screenshot](wear-table-tennis/docs/emulator-screenshot.png)
 ![TT Score Wear OS Emulator Screenshot (Current State)](wear-table-tennis/docs/emulator-screenshot-current.png)
+![TT Score Wear OS Emulator Screenshot (9-9 Comeback State)](wear-table-tennis/docs/emulator-screenshot-nine-nine.png)
 ![TT Score Wear OS Emulator Screenshot (Settings)](wear-table-tennis/docs/emulator-screenshot-settings.png)
 
 ## Functionality
