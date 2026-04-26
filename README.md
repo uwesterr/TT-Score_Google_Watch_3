@@ -4,6 +4,7 @@ Wear OS table-tennis scoring app for fast point tracking during real matches.
 
 ![TT Score Wear OS Emulator Screenshot](wear-table-tennis/docs/emulator-screenshot.png)
 ![TT Score Wear OS Emulator Screenshot (Current State)](wear-table-tennis/docs/emulator-screenshot-current.png)
+![TT Score Wear OS Emulator Screenshot (Settings)](wear-table-tennis/docs/emulator-screenshot-settings.png)
 
 ## Functionality
 
@@ -24,6 +25,7 @@ Wear OS table-tennis scoring app for fast point tracking during real matches.
   - `Undo`
   - `New` (reset match during play)
 - Pro features:
+  - dedicated settings screen
   - editable player names
   - speech input for `Me` and `Opponent` names in settings
   - best-of-3 or best-of-5 match format

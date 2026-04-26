@@ -11,7 +11,7 @@ Native Wear OS table-tennis scorer for Me vs Opponent.
 - From 10-10 onward, service changes every point.
 - The app asks who serves first in set 1.
 - Later sets automatically alternate the starting server.
-- The Pro version adds editable player names, speech input for names, best-of-3 or best-of-5 match format, haptics/display settings, and live cue banners.
+- The Pro version adds a dedicated settings screen, editable player names, speech input for names, best-of-3 or best-of-5 match format, haptics/display settings, and live cue banners.
 - Swipe left to open point-history charts:
   - during a set: current-set chart
   - after a set: completed-set chart
