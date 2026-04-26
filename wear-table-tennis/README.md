@@ -1,4 +1,4 @@
-# TT Score for Wear OS
+# TT Score Pro for Wear OS
 
 Native Wear OS table-tennis scorer for Me vs Opponent.
 
@@ -11,6 +11,11 @@ Native Wear OS table-tennis scorer for Me vs Opponent.
 - From 10-10 onward, service changes every point.
 - The app asks who serves first in set 1.
 - Later sets automatically alternate the starting server.
+- The Pro version adds editable player names, speech input for names, best-of-3 or best-of-5 match format, haptics/display settings, and live cue banners.
+- Swipe left to open point-history charts:
+  - during a set: current-set chart
+  - after a set: completed-set chart
+  - after a match: final-set chart
 
 ## Project
 
@@ -28,6 +33,13 @@ wear-table-tennis/
 ```
 
 Then select a Wear OS emulator or connected Pixel Watch / Samsung Galaxy Watch and run the `app` configuration.
+
+On the watch:
+
+- Use `Set` to open settings.
+- Tap `Mic` beside a player name to dictate it.
+- Swipe left from the score screen to inspect the current set chart.
+- Swipe left from the set-complete or match-over screen to inspect the finished set chart.
 
 ## Test
 

@@ -38,6 +38,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.10.0")
     implementation("androidx.compose.ui:ui:1.8.0")
     implementation("androidx.compose.ui:ui-tooling-preview:1.8.0")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.wear.compose:compose-foundation:1.6.0")
     implementation("androidx.wear.compose:compose-material3:1.6.0")
 

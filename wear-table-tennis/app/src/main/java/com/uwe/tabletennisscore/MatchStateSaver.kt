@@ -15,7 +15,7 @@ private fun MatchState.encode(): String {
 
 private fun String.decodeMatchState(): MatchState {
     val parts = split("|", limit = 2)
-    val snapshot = decodeSnapshot(parts.firstOrNull().orEmpty()) ?: return MatchState()
+    val snapshot = decodeSnapshot(parts.firstOrNull().orEmpty()) ?: return MatchRules.newMatch()
     val undoStack = parts.getOrNull(1)
         ?.takeIf { it.isNotBlank() }
         ?.split(";")
@@ -27,6 +27,7 @@ private fun String.decodeMatchState(): MatchState {
         currentSetIndex = snapshot.currentSetIndex.coerceIn(snapshot.sets.indices),
         matchWinner = snapshot.matchWinner,
         undoStack = undoStack,
+        setsToWinMatch = snapshot.setsToWinMatch,
     )
 }
 
@@ -35,12 +36,12 @@ private fun encodeSnapshot(snapshot: MatchSnapshot): String {
         listOf(set.uwePoints, set.opponentPoints, set.firstServer?.code ?: "N").joinToString(":")
     }
     val winner = snapshot.matchWinner?.code ?: "N"
-    return listOf(sets, snapshot.currentSetIndex, winner).joinToString("#")
+    return listOf(sets, snapshot.currentSetIndex, winner, snapshot.setsToWinMatch).joinToString("#")
 }
 
 private fun decodeSnapshot(value: String): MatchSnapshot? {
     val parts = value.split("#")
-    if (parts.size != 3) return null
+    if (parts.size !in 3..4) return null
 
     val sets = parts[0].split(",")
         .filter { it.isNotBlank() }
@@ -56,9 +57,11 @@ private fun decodeSnapshot(value: String): MatchSnapshot? {
         .ifEmpty { listOf(SetScore()) }
 
     val setIndex = parts[1].toIntOrNull() ?: return null
+    val setsToWinMatch = parts.getOrNull(3)?.toIntOrNull() ?: MatchFormat.BEST_OF_THREE.setsToWinMatch
     return MatchSnapshot(
         sets = sets,
         currentSetIndex = setIndex.coerceIn(sets.indices),
         matchWinner = Player.fromCode(parts[2]),
+        setsToWinMatch = MatchFormat.fromSetsToWin(setsToWinMatch).setsToWinMatch,
     )
 }

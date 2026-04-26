@@ -1,4 +1,4 @@
-# TT Score for Wear OS Watches
+# TT Score Pro for Wear OS Watches
 
 Wear OS table-tennis scoring app for fast point tracking during real matches.
 
@@ -23,6 +23,18 @@ Wear OS table-tennis scoring app for fast point tracking during real matches.
   - `+ Opp`
   - `Undo`
   - `New` (reset match during play)
+- Pro features:
+  - editable player names
+  - speech input for `Me` and `Opponent` names in settings
+  - best-of-3 or best-of-5 match format
+  - rule-aware cue banners for serve change, deuce, set point, match point, and change ends
+  - haptics toggle
+  - display always on toggle
+  - swipeable point-history charts
+- Swipe left on the watch to open chart screens:
+  - during a set: current-set point progression
+  - after a set: completed-set point progression before `Next set`
+  - after a match: final-set point progression before `New match`
 - Keeps the watch display on while the app is in the foreground.
 - Shared large-round layout tuned for both Pixel Watch 3 and Samsung Galaxy Watch7 44mm (`SM-L310`).
 
@@ -180,8 +192,12 @@ If the watch does not connect the first time:
 5. Get to `10-10` and confirm service changes every point.
 6. Finish set 1, tap `Next set`, and confirm set 2 starts immediately with the opposite starting server.
 7. Test `Undo`.
-8. Test `New`.
-9. Confirm the screen stays on while the app is active in the foreground.
+8. Swipe left during the set and confirm the chart screen appears.
+9. On the set-finished screen, swipe left and confirm the last-set chart appears.
+10. On the match-over screen, swipe left and confirm the final-set chart appears.
+11. Open `Settings`, tap the `Mic` button next to a player name, and confirm speech input fills the field.
+12. Test `New`.
+13. Confirm the screen stays on while the app is active in the foreground.
 
 ## Build And Test
 
