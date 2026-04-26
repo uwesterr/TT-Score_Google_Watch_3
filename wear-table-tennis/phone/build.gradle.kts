@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.uwe.tabletennisscore"
+    namespace = "com.uwe.tabletennisscore.phone"
     compileSdk = 35
 
     defaultConfig {
@@ -29,22 +29,14 @@ android {
 }
 
 dependencies {
-    implementation("com.google.android.gms:play-services-wearable:19.0.0")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.0")
     implementation("androidx.compose.ui:ui:1.8.0")
     implementation("androidx.compose.ui:ui-tooling-preview:1.8.0")
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation("androidx.wear.compose:compose-foundation:1.6.0")
-    implementation("androidx.wear.compose:compose-material3:1.6.0")
-    compileOnly("androidx.wear:wear-tooling-preview:1.0.0")
+    implementation("androidx.compose.material3:material3:1.3.2")
+    implementation("com.google.android.gms:play-services-wearable:19.0.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling:1.8.0")
 
     testImplementation("junit:junit:4.13.2")
-
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.8.0")
-    debugImplementation("androidx.compose.ui:ui-test-manifest:1.8.0")
 }

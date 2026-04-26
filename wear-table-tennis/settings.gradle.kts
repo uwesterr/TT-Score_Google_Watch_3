@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "WearTableTennis"
 include(":app")
+include(":phone")

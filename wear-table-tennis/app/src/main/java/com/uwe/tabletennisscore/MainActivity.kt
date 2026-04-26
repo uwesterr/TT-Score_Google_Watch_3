@@ -66,12 +66,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
+import androidx.wear.tooling.preview.devices.WearDevices
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -217,6 +217,7 @@ fun TableTennisApp() {
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val soundPlayer = remember(context) { EndSoundPlayer(context.applicationContext) }
+    val scorePublisher = remember(context) { WatchScorePublisher(context.applicationContext) }
 
     var state by rememberSaveable(stateSaver = MatchStateSaver) { mutableStateOf(MatchRules.newMatch()) }
     var screen by rememberSaveable { mutableStateOf(AppScreen.MATCH) }
@@ -253,6 +254,10 @@ fun TableTennisApp() {
             state = state.copy(setsToWinMatch = settings.setsToWinMatch)
             settingsHydrated = true
         }
+    }
+
+    LaunchedEffect(state, settings.meName, settings.opponentName) {
+        scorePublisher.publish(state, settings)
     }
 
     SideEffect {
@@ -1719,8 +1724,8 @@ private fun MatchState.isPristine(): Boolean =
         currentSet.opponentPoints == 0 &&
         currentSet.firstServer == null
 
-@Preview(device = Devices.WEAR_OS_SMALL_ROUND, showSystemUi = true)
-@Preview(device = Devices.WEAR_OS_LARGE_ROUND, showSystemUi = true)
+@Preview(device = WearDevices.SMALL_ROUND, showSystemUi = true)
+@Preview(device = WearDevices.LARGE_ROUND, showSystemUi = true)
 @Composable
 private fun ScorePreview() {
     val settings = AppSettings()
