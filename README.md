@@ -1,66 +1,105 @@
-# TT Score Pro for Wear OS Watches
+# TT Score Pro
 
-Wear OS table-tennis scoring app for fast point tracking during real matches.
+TT Score Pro is a **standalone Wear OS table-tennis scoring app** with an optional **Android phone companion** that mirrors the live match.
 
-This app was written with Codex.
+The project was written with **Codex**.
+
+## Screenshots
+
+### Watch
 
 ![TT Score Wear OS Emulator Screenshot](wear-table-tennis/docs/emulator-screenshot.png)
-![TT Score Wear OS Emulator Screenshot (Current State)](wear-table-tennis/docs/emulator-screenshot-current.png)
 ![TT Score Wear OS Emulator Screenshot (9-9 Comeback State)](wear-table-tennis/docs/emulator-screenshot-nine-nine.png)
 ![TT Score Wear OS Emulator Screenshot (Settings)](wear-table-tennis/docs/emulator-screenshot-settings.png)
 
-## Functionality
+### Phone Companion
 
-- Match format: best of 3 sets.
-- Set rules: first to 11 points, win by 2 points.
-- Serve rules:
-  - service changes every 2 points before deuce
-  - at 10-10 and above, service changes every point
-- At the start of the match, the app asks who serves first in set 1.
-- In later sets, first serve switches automatically to the player who did not start the previous set.
-- Main scoring screen shows:
-  - current points (`Me` vs `Opponent`)
-  - current server
-  - set score (`0-0`, `1-0`, etc.)
-- Quick controls:
+![TT Score Pro Phone Companion Landscape Screenshot](wear-table-tennis/docs/phone-landscape-screenshot.png)
+
+## What The App Does
+
+### Watch app
+
+- Standalone scoring app for real table-tennis matches
+- Best of 3 by default, with optional best of 5
+- Sets to 11, win by 2
+- Service changes every 2 points before deuce, then every point from `10-10`
+- Asks who serves first in set 1
+- Later sets automatically alternate the starting server
+- Large touch-first controls:
   - `+ Me`
   - `+ Opp`
   - `Undo`
-  - `New` (reset match during play)
-- Pro features:
-  - dedicated settings screen
+  - `New`
+- Live display of:
+  - current score
+  - current server
+  - set score
+- Dedicated settings screen with:
   - editable player names
-  - speech input for `Me` and `Opponent` names in settings
-  - best-of-3 or best-of-5 match format
-  - rule-aware cue banners for serve change, deuce, set point, match point, and change ends
-  - haptics toggle
-  - display always on toggle
-  - swipeable point-history charts
-- Swipe left on the watch to open chart screens:
-  - during a set: current-set point progression
-  - after a set: completed-set point progression before `Next set`
-  - after a match: final-set point progression before `New match`
-- Keeps the watch display on while the app is in the foreground.
-- Shared large-round layout tuned for both Pixel Watch 3 and Samsung Galaxy Watch7 44mm (`SM-L310`).
+  - speech input for names
+  - best-of-3 / best-of-5
+  - haptics on/off
+  - sounds on/off
+  - display always on on/off
+- Rule-aware cue banners for:
+  - serve change
+  - deuce
+  - set point
+  - match point
+  - change ends
+- Swipeable point-history charts:
+  - during a set
+  - after a set
+  - after a match
+- Win/loss sound cues and celebration effects
 
-## Requirements
+### Phone companion app
 
-- Android Studio (latest stable recommended).
-- Android SDK with:
-  - `platform-tools` (ADB)
-  - Wear OS emulator image (if testing in emulator)
-- Java 17 runtime (Android Studio bundled JBR works).
-- For physical watch install:
-  - Wear OS watch
-  - Tested target sizes:
-    - Google Pixel Watch 3
-    - Samsung Galaxy Watch7 44mm (`SM-L310`)
-  - Developer options enabled on watch
-  - ADB debugging enabled
-  - Wireless debugging enabled (`Debug over Wi-Fi` on some Samsung One UI builds)
-  - Watch and computer on the same Wi-Fi network
+- Read-only companion display for the live match
+- Big scoreboard layout with a landscape mode tuned for distance readability
+- Shows:
+  - current score
+  - current server
+  - set score
+  - current set
+  - match status
+- End-of-set and end-of-match result cards
+- Phone-side sounds and celebration animation
+- Phone-side speech output in **German**
+  - after each ball, the phone says the score
+  - the score order follows the player who serves next
+  - when the serve changes, the phone says who serves next
+  - after each set and each match, the phone announces the winner and the set standing
+- Phone `Sounds` setting is the master switch for all phone audio:
+  - jingles
+  - speech
 
-## Install And Run (Step By Step)
+## Devices And Requirements
+
+- Android Studio (latest stable recommended)
+- Java 17 runtime (Android Studio bundled JBR is fine)
+- Android SDK with `platform-tools`
+- For watch testing:
+  - Wear OS emulator image, or
+  - physical Wear OS watch
+
+### Confirmed watch targets
+
+- Google Pixel Watch 3
+- Samsung Galaxy Watch7 44mm (`SM-L310`)
+
+### Important behavior
+
+- The **watch app stays usable without the phone nearby**
+- The **phone app is only a companion display**
+
+## Project Structure
+
+- `wear-table-tennis/app` = Wear OS watch app
+- `wear-table-tennis/phone` = Android phone companion app
+
+## Install And Run
 
 ### 1) Get the project
 
@@ -72,137 +111,128 @@ cd TT-Score_Google_Watch_3/wear-table-tennis
 ### 2) Open in Android Studio
 
 1. Open Android Studio.
-2. Select `Open`.
-3. Choose the `wear-table-tennis` folder.
+2. Choose `Open`.
+3. Select the `wear-table-tennis` folder.
 4. Wait for Gradle sync to finish.
 
-### 3) Run on Wear emulator
+### 3) Run on emulators
 
-1. Android Studio -> `Tools` -> `Device Manager`.
-2. Create/start a `Wear OS Large Round` virtual device.
-3. Select the emulator in the run target dropdown.
+#### Watch emulator
+
+1. Open `Tools` -> `Device Manager`.
+2. Create or start a `Wear OS Large Round` emulator.
+3. Select the watch emulator in the device dropdown.
 4. Run the `app` configuration.
 
-### 4) Run on a real Wear OS watch (wireless ADB)
+#### Phone emulator
 
-#### Option A: Samsung Galaxy Watch7 44mm (`SM-L310`)
+1. Create or start an Android phone emulator.
+2. Select it in the device dropdown.
+3. Run the `phone` configuration.
+
+To mirror the watch score on the phone emulator, pair the phone and watch emulators through the normal Wear OS emulator pairing flow.
+
+### 4) Install on a real watch
+
+#### Pixel Watch 3
 
 On the watch:
 
-1. Wake the watch and open `Settings`.
-2. Tap `Connections`.
-3. Tap `Wi-Fi`.
-4. Turn Wi-Fi on if needed.
-5. Choose the same Wi-Fi network the computer is using.
-6. Enter the Wi-Fi password if prompted.
-7. Go back to the main `Settings` screen.
-8. Tap `About watch`.
-9. Tap `Software`.
-10. Tap `Software version` 5 times.
-11. Wait for the toast confirming Developer options are enabled.
-12. Go back to `Settings`.
-13. Tap `Developer options`.
-14. Turn on `ADB debugging`.
-15. Confirm the warning prompt if one appears.
-16. Turn on `Wireless debugging` or `Debug over Wi-Fi` (Samsung wording varies by One UI version).
-17. Tap the wireless debugging entry itself.
-18. Tap `Pair new device` or `Pair device with pairing code`.
-19. Keep that screen open.
-20. Note the following from the watch:
-    - the pairing IP address and port
-    - the 6-digit pairing code
-21. After pairing is complete, go back one screen and note the normal connection IP address and port shown for wireless debugging.
+1. Open `Settings` -> `System` -> `About` -> `Versions`.
+2. Tap `Build number` 7 times.
+3. Go back to `Settings` -> `Developer options`.
+4. Turn on `ADB debugging`.
+5. Turn on `Wireless debugging`.
+6. Tap `Pair new device` and keep that screen open.
 
-#### Option B: Google Pixel Watch 3
+#### Samsung Galaxy Watch7 44mm (`SM-L310`)
 
-On watch:
+On the watch:
 
-1. `Settings` -> `System` -> `About` -> `Versions`.
-2. Tap `Build number` 7 times (enable Developer options).
-3. Go to `Settings` -> `Developer options`.
-4. Enable `ADB debugging`.
-5. Enable `Wireless debugging`.
-6. Open `Pair new device` and note pairing code.
+1. Open `Settings` -> `Connections` -> `Wi-Fi`.
+2. Connect the watch to the same Wi-Fi network as the computer.
+3. Go to `Settings` -> `About watch` -> `Software`.
+4. Tap `Software version` 5 times.
+5. Go to `Settings` -> `Developer options`.
+6. Turn on `ADB debugging`.
+7. Turn on `Wireless debugging` or `Debug over Wi-Fi`.
+8. Tap `Pair new device` and keep that screen open.
 
-#### Pair and install from the computer
-
-On the computer:
-
-1. Open `Terminal`.
-2. Change into the Wear project folder:
+#### Pair and install from the Mac
 
 ```bash
 cd /Users/uwesterr/Documents/New\ project/wear-table-tennis
-```
-
-3. Define the local ADB path:
-
-```bash
 ADB="/Users/uwesterr/Library/Android/sdk/platform-tools/adb"
-```
-
-4. Ask ADB to discover the watch:
-
-```bash
 $ADB mdns services
-```
-
-5. In the output, find the current `_adb-tls-pairing._tcp` entry for the watch and use that IP:port for pairing:
-
-```bash
 $ADB pair <PAIRING_IP:PAIRING_PORT>
-```
-
-6. When Terminal asks for `Enter pairing code:`, type the 6-digit code from the watch and press Enter.
-7. Wait for the `Successfully paired` message.
-8. Back in the watch's wireless debugging screen, find the regular connection IP:port.
-9. Connect to the watch:
-
-```bash
 $ADB connect <CONNECT_IP:CONNECT_PORT>
 $ADB devices
-```
-
-10. Confirm the watch appears in the `adb devices` list as `device`.
-11. Install the app:
-
-```bash
 env JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
 ANDROID_SERIAL="<CONNECT_IP:CONNECT_PORT>" \
 ./gradlew :app:installDebug
-```
-
-12. Launch the app:
-
-```bash
 $ADB -s <CONNECT_IP:CONNECT_PORT> shell am start -n com.uwe.tabletennisscore/.MainActivity
 ```
 
-13. The app should open on the watch on the `Serve first?` screen.
+Expected result:
 
-If the watch does not connect the first time:
+- the watch opens on the scorer
+- the watch app works even without the phone companion connected
 
-1. Make sure the watch and computer are still on the same Wi-Fi.
-2. Turn `Wireless debugging` off and back on on the watch.
-3. Open `Pair new device` again.
-4. Use the fresh pairing port and fresh 6-digit code.
-5. Ignore stale ports shown in old Android Studio popups and use the current values from the watch or `adb mdns services`.
+### 5) Install on a real Android phone
 
-### 5) Manual smoke test on the watch
+Enable developer mode on the phone:
 
-1. Launch the app.
-2. Choose who serves first in set 1.
-3. Tap both scoring buttons and confirm points update immediately.
-4. Confirm service changes every 2 points before `10-10`.
-5. Get to `10-10` and confirm service changes every point.
-6. Finish set 1, tap `Next set`, and confirm set 2 starts immediately with the opposite starting server.
+1. Open `Settings` -> `About phone`.
+2. Tap `Build number` 7 times.
+3. Go to `Settings` -> `System` -> `Developer options`.
+4. Enable either:
+   - `USB debugging`, or
+   - `Wireless debugging`
+
+Install the companion app:
+
+```bash
+cd /Users/uwesterr/Documents/New\ project/wear-table-tennis
+env JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+ANDROID_SERIAL="<PHONE_SERIAL>" \
+./gradlew :phone:installDebug
+/Users/uwesterr/Library/Android/sdk/platform-tools/adb -s <PHONE_SERIAL> \
+shell am start -n com.uwe.tabletennisscore/com.uwe.tabletennisscore.phone.MainActivity
+```
+
+Expected result:
+
+- the phone opens the companion app
+- the phone mirrors the live watch score when the watch app is running and paired
+
+## Manual Smoke Test
+
+### Watch
+
+1. Start a match.
+2. Choose the first server.
+3. Score points for both players.
+4. Confirm serve changes correctly.
+5. Confirm deuce behavior at `10-10`.
+6. Finish a set and confirm the next set starts with the opposite starting server.
 7. Test `Undo`.
-8. Swipe left during the set and confirm the chart screen appears.
-9. On the set-finished screen, swipe left and confirm the last-set chart appears.
-10. On the match-over screen, swipe left and confirm the final-set chart appears.
-11. Open `Settings`, tap the `Mic` button next to a player name, and confirm speech input fills the field.
-12. Test `New`.
-13. Confirm the screen stays on while the app is active in the foreground.
+8. Test `New`.
+9. Open `Settings`.
+10. Test name speech input.
+11. Swipe to the history chart screens.
+
+### Phone companion
+
+1. Open the phone app while the watch app is running.
+2. Confirm the score mirrors the watch.
+3. Rotate the phone to landscape and confirm the large scoreboard is readable from farther away.
+4. Confirm the serving player is clearly indicated.
+5. Score a point on the watch and listen for the German spoken score.
+6. Wait for a serve change and confirm the phone announces who serves next.
+7. Finish a set and a match and confirm:
+   - result cards appear
+   - German winner announcements play
+8. Open phone `Settings`, switch `Sounds` off, and confirm all phone audio stops.
 
 ## Build And Test
 
@@ -210,5 +240,6 @@ From `wear-table-tennis`:
 
 ```bash
 env JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew test
-env JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew :app:assembleDebug
+env JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew assembleDebug
+env JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew bundleRelease
 ```
