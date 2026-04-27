@@ -8,13 +8,13 @@ The project was written with **Codex**.
 
 ### Watch
 
-![TT Score Wear OS Emulator Screenshot](wear-table-tennis/docs/emulator-screenshot.png)
-![TT Score Wear OS Emulator Screenshot (9-9 Comeback State)](wear-table-tennis/docs/emulator-screenshot-nine-nine.png)
-![TT Score Wear OS Emulator Screenshot (Settings)](wear-table-tennis/docs/emulator-screenshot-settings.png)
+<img src="wear-table-tennis/docs/emulator-screenshot.png" alt="TT Score Wear OS Emulator Screenshot" width="32%">
+<img src="wear-table-tennis/docs/emulator-screenshot-nine-nine.png" alt="TT Score Wear OS Emulator Screenshot (9-9 Comeback State)" width="32%">
+<img src="wear-table-tennis/docs/emulator-screenshot-settings.png" alt="TT Score Wear OS Emulator Screenshot (Settings)" width="32%">
 
 ### Phone Companion
 
-![TT Score Pro Phone Companion Landscape Screenshot](wear-table-tennis/docs/phone-landscape-screenshot.png)
+<img src="wear-table-tennis/docs/phone-landscape-screenshot.png" alt="TT Score Pro Phone Companion Landscape Screenshot" width="65%">
 
 ## What The App Does
 
