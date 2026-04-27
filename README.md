@@ -99,6 +99,48 @@ The project was written with **Codex**.
 - `wear-table-tennis/app` = Wear OS watch app
 - `wear-table-tennis/phone` = Android phone companion app
 
+## Android Studio Workflow Notes
+
+### Module-to-device mapping
+
+- `:app` is the Wear OS scorer
+- `:phone` is the Android phone companion
+- Install `:app` on the watch or Wear emulator
+- Install `:phone` on the phone or phone emulator
+
+The watch app remains standalone and still works without the phone nearby.
+
+### Running in Android Studio
+
+1. Start the Wear emulator from `Tools` -> `Device Manager` and run the `app` configuration.
+2. Start the phone emulator and run the `phone` configuration.
+3. Treat the phone app as a companion viewer only; the watch app remains the scoring source of truth.
+
+### Pairing phone and watch emulators
+
+1. Use Android Studio's Wear pairing flow first.
+2. If auto-pairing fails, open or install the **Wear OS** app on the phone emulator and finish the pairing there.
+3. After pairing, reopen both TT Score Pro apps and trigger a fresh score update on the watch so the phone receives the first mirrored state.
+
+### Installing on real devices
+
+- Watch:
+  - enable developer options
+  - enable `ADB debugging`
+  - enable `Wireless debugging`
+  - pair/connect with `adb`
+  - install `:app`
+- Phone:
+  - enable developer options
+  - enable `USB debugging` or `Wireless debugging`
+  - install `:phone`
+
+### Common pitfalls
+
+- If `:phone` is installed on the watch by mistake, the watch shows the companion waiting screen instead of the scorer.
+- The phone app can stay in a waiting state until the watch sends a fresh score event after pairing.
+- Pairing the emulators is separate from launching the correct module on each device.
+
 ## Install And Run
 
 ### 1) Get the project
