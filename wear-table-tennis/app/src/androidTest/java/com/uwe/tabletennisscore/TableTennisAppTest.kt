@@ -187,4 +187,21 @@ class TableTennisAppTest {
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON == 0,
         )
     }
+
+    @Test
+    fun doublesModeUsesDedicatedOpeningOrderPrompt() {
+        composeTestRule.onNodeWithTag("openSettingsFromPrompt").performClick()
+        composeTestRule.onNodeWithTag("modeDoubles").performClick()
+        composeTestRule.onNodeWithTag("settingsScreen").performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithTag("saveSettings").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("doublesServePrompt").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Who serves first?").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("serveUwe").performClick()
+        composeTestRule.onNodeWithTag("doublesServerH1").performClick()
+        composeTestRule.onNodeWithTag("doublesReceiverA1").performClick()
+
+        composeTestRule.onNodeWithText("Serve Me -> Opponent").assertIsDisplayed()
+    }
 }

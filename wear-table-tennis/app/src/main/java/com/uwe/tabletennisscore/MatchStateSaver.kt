@@ -28,40 +28,68 @@ private fun String.decodeMatchState(): MatchState {
         matchWinner = snapshot.matchWinner,
         undoStack = undoStack,
         setsToWinMatch = snapshot.setsToWinMatch,
+        matchMode = snapshot.matchMode,
     )
 }
 
 private fun encodeSnapshot(snapshot: MatchSnapshot): String {
     val sets = snapshot.sets.joinToString(",") { set ->
-        listOf(set.uwePoints, set.opponentPoints, set.firstServer?.code ?: "N").joinToString(":")
+        listOf(
+            set.uwePoints,
+            set.opponentPoints,
+            set.firstServer?.code ?: "N",
+            set.doublesFirstServer?.code ?: "N",
+            set.doublesFirstReceiver?.code ?: "N",
+            set.doublesReceiverSwapTeam?.code ?: "N",
+        ).joinToString(":")
     }
     val winner = snapshot.matchWinner?.code ?: "N"
-    return listOf(sets, snapshot.currentSetIndex, winner, snapshot.setsToWinMatch).joinToString("#")
+    return listOf(
+        sets,
+        snapshot.currentSetIndex,
+        winner,
+        snapshot.setsToWinMatch,
+        snapshot.matchMode.name,
+    ).joinToString("#")
 }
 
 private fun decodeSnapshot(value: String): MatchSnapshot? {
     val parts = value.split("#")
-    if (parts.size !in 3..4) return null
+    if (parts.size !in 3..5) return null
 
     val sets = parts[0].split(",")
         .filter { it.isNotBlank() }
         .mapNotNull { encodedSet ->
             val setParts = encodedSet.split(":")
-            if (setParts.size != 3) return@mapNotNull null
+            if (setParts.size !in 3..6) return@mapNotNull null
             SetScore(
                 uwePoints = setParts[0].toIntOrNull() ?: return@mapNotNull null,
                 opponentPoints = setParts[1].toIntOrNull() ?: return@mapNotNull null,
                 firstServer = Player.fromCode(setParts[2]),
+                doublesFirstServer = DoublesSeat.fromCode(setParts.getOrNull(3).orEmpty()),
+                doublesFirstReceiver = DoublesSeat.fromCode(setParts.getOrNull(4).orEmpty()),
+                doublesReceiverSwapTeam = Player.fromCode(setParts.getOrNull(5).orEmpty()),
             )
         }
         .ifEmpty { listOf(SetScore()) }
 
     val setIndex = parts[1].toIntOrNull() ?: return null
     val setsToWinMatch = parts.getOrNull(3)?.toIntOrNull() ?: MatchFormat.BEST_OF_THREE.setsToWinMatch
+    val matchMode = parts.getOrNull(4)?.let { encodedMode ->
+        MatchMode.entries.firstOrNull { it.name == encodedMode }
+    } ?: inferMatchMode(sets)
     return MatchSnapshot(
         sets = sets,
         currentSetIndex = setIndex.coerceIn(sets.indices),
         matchWinner = Player.fromCode(parts[2]),
         setsToWinMatch = MatchFormat.fromSetsToWin(setsToWinMatch).setsToWinMatch,
+        matchMode = matchMode,
     )
 }
+
+private fun inferMatchMode(sets: List<SetScore>): MatchMode =
+    if (sets.any { it.doublesFirstServer != null || it.doublesFirstReceiver != null }) {
+        MatchMode.DOUBLES
+    } else {
+        MatchMode.SINGLES
+    }

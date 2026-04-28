@@ -2,10 +2,13 @@ package com.uwe.tabletennisscore.phone
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.media.AudioAttributes
-import android.media.SoundPool
+import android.media.Ringtone
+import android.media.RingtoneManager
+import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,6 +27,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -64,7 +69,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicReference
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.cos
@@ -85,14 +89,23 @@ private enum class PhoneScreen {
     SETTINGS,
 }
 
+private enum class PhoneMatchMode {
+    SINGLES,
+    DOUBLES,
+}
+
 private data class CompanionScoreSnapshot(
+    val matchMode: PhoneMatchMode = PhoneMatchMode.SINGLES,
     val meName: String = "Me",
     val opponentName: String = "Opponent",
     val mePoints: Int = 0,
     val opponentPoints: Int = 0,
     val currentServerName: String = "",
+    val currentServerTeamCode: String = "",
+    val currentReceiverName: String = "",
     val meSetsWon: Int = 0,
     val opponentSetsWon: Int = 0,
+    val setsToWinMatch: Int = 2,
     val currentSetNumber: Int = 1,
     val matchStatus: String = "Waiting for watch score",
     val emptyMessage: String = "Open the watch app and start a match to mirror the live score here.",
@@ -109,13 +122,35 @@ private data class CompanionScoreSnapshot(
 
     val winnerName: String?
         get() = matchStatus.substringBefore(" won", "").takeIf { " won" in matchStatus }
+
+    fun roleTextForTeam(teamCode: String): String? {
+        if (matchMode != PhoneMatchMode.DOUBLES) return null
+        return when (teamCode) {
+            currentServerTeamCode -> currentServerName.ifBlank { null }?.let { "Server: $it" }
+            receiverTeamCode() -> currentReceiverName.ifBlank { null }?.let { "Receiver: $it" }
+            else -> null
+        }
+    }
+
+    private fun receiverTeamCode(): String? = when (currentServerTeamCode) {
+        "U" -> "O"
+        "O" -> "U"
+        else -> null
+    }
 }
 
 private enum class PhoneEndEffectType {
     HAPPY_SET,
     HAPPY_MATCH,
-    NEUTRAL_SET,
-    NEUTRAL_MATCH,
+    SAD_SET,
+    SAD_MATCH,
+}
+
+private enum class PhoneSpeechLanguage(
+    val locale: Locale,
+) {
+    GERMAN(Locale.GERMANY),
+    ENGLISH(Locale.UK),
 }
 
 private data class PhoneEndEffect(
@@ -137,56 +172,54 @@ private data class PhoneConfettiParticle(
 
 private data class PhoneUiSettings(
     val soundsEnabled: Boolean = true,
+    val speechLanguage: PhoneSpeechLanguage = PhoneSpeechLanguage.GERMAN,
 )
 
 private class PhoneEndSoundPlayer(context: Context) {
-    private val loadedEffects = mutableSetOf<PhoneEndEffectType>()
-    private val pendingEffect = AtomicReference<PhoneEndEffectType?>(null)
-    private val soundPool = SoundPool.Builder()
-        .setMaxStreams(2)
-        .setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_GAME)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build(),
-        )
-        .build()
+    private val appContext = context.applicationContext
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var activeRingtone: Ringtone? = null
+    private var stopRunnable: Runnable? = null
 
-    private val soundIds = mapOf(
-        PhoneEndEffectType.HAPPY_SET to soundPool.load(context, R.raw.win_set, 1),
-        PhoneEndEffectType.HAPPY_MATCH to soundPool.load(context, R.raw.win_match, 1),
-        PhoneEndEffectType.NEUTRAL_SET to soundPool.load(context, R.raw.lose_set, 1),
-        PhoneEndEffectType.NEUTRAL_MATCH to soundPool.load(context, R.raw.lose_match, 1),
+    private val toneUris = mapOf(
+        PhoneEndEffectType.HAPPY_SET to defaultToneUri(RingtoneManager.TYPE_RINGTONE),
+        PhoneEndEffectType.HAPPY_MATCH to defaultToneUri(RingtoneManager.TYPE_RINGTONE),
+        PhoneEndEffectType.SAD_SET to defaultToneUri(RingtoneManager.TYPE_NOTIFICATION),
+        PhoneEndEffectType.SAD_MATCH to defaultToneUri(RingtoneManager.TYPE_NOTIFICATION),
     )
 
-    init {
-        soundPool.setOnLoadCompleteListener { _, sampleId, status ->
-            if (status != 0) return@setOnLoadCompleteListener
-            val effect = soundIds.entries.firstOrNull { it.value == sampleId }?.key ?: return@setOnLoadCompleteListener
-            loadedEffects += effect
-            if (pendingEffect.compareAndSet(effect, null)) {
-                playLoaded(effect)
-            }
-        }
-    }
-
     fun play(effect: PhoneEndEffectType) {
-        if (effect in loadedEffects) {
-            playLoaded(effect)
-        } else {
-            pendingEffect.set(effect)
+        release()
+        val uri = toneUris[effect] ?: return
+        runCatching {
+            val ringtone = RingtoneManager.getRingtone(appContext, uri) ?: return
+            activeRingtone = ringtone
+            ringtone.play()
+            val durationMs = if (effect == PhoneEndEffectType.HAPPY_MATCH || effect == PhoneEndEffectType.SAD_MATCH) {
+                4_000L
+            } else {
+                2_000L
+            }
+            stopRunnable = Runnable { release() }.also { runnable ->
+                mainHandler.postDelayed(runnable, durationMs)
+            }
+        }.onFailure {
+            release()
         }
     }
 
     fun release() {
-        soundPool.release()
+        stopRunnable?.let(mainHandler::removeCallbacks)
+        stopRunnable = null
+        activeRingtone?.runCatching {
+            stop()
+        }
+        activeRingtone = null
     }
 
-    private fun playLoaded(effect: PhoneEndEffectType) {
-        val soundId = soundIds.getValue(effect)
-        val playbackRate = if (effect == PhoneEndEffectType.HAPPY_MATCH) 1.03f else 1f
-        soundPool.play(soundId, 1f, 1f, 1, 0, playbackRate)
-    }
+    private fun defaultToneUri(type: Int): Uri? =
+        RingtoneManager.getDefaultUri(type)
+            ?: RingtoneManager.getActualDefaultRingtoneUri(appContext, type)
 }
 
 private class PhoneSpeechPlayer(context: Context) : TextToSpeech.OnInitListener {
@@ -194,20 +227,21 @@ private class PhoneSpeechPlayer(context: Context) : TextToSpeech.OnInitListener 
     private var textToSpeech: TextToSpeech? = TextToSpeech(appContext, this)
     private var isReady = false
     private var pendingAnnouncement: PhoneSpeechAnnouncement? = null
+    private var selectedLanguage: PhoneSpeechLanguage = PhoneSpeechLanguage.GERMAN
 
     override fun onInit(status: Int) {
-        val tts = textToSpeech ?: return
         if (status != TextToSpeech.SUCCESS) return
-        val languageResult = tts.setLanguage(Locale.GERMANY)
-        if (languageResult == TextToSpeech.LANG_MISSING_DATA || languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-            return
-        }
-        tts.setSpeechRate(0.95f)
-        isReady = true
+        configureLanguage(selectedLanguage)
         pendingAnnouncement?.let {
             pendingAnnouncement = null
             speakNow(it)
         }
+    }
+
+    fun setLanguage(language: PhoneSpeechLanguage) {
+        selectedLanguage = language
+        stop()
+        configureLanguage(language)
     }
 
     fun speak(announcement: PhoneSpeechAnnouncement) {
@@ -229,6 +263,16 @@ private class PhoneSpeechPlayer(context: Context) : TextToSpeech.OnInitListener 
         textToSpeech = null
     }
 
+    private fun configureLanguage(language: PhoneSpeechLanguage) {
+        val tts = textToSpeech ?: return
+        val languageResult = tts.setLanguage(language.locale)
+        isReady = languageResult != TextToSpeech.LANG_MISSING_DATA &&
+            languageResult != TextToSpeech.LANG_NOT_SUPPORTED
+        if (isReady) {
+            tts.setSpeechRate(0.95f)
+        }
+    }
+
     private fun speakNow(announcement: PhoneSpeechAnnouncement) {
         textToSpeech?.speak(
             announcement.text,
@@ -245,11 +289,15 @@ private class PhoneSettingsStore(context: Context) {
 
     fun load(): PhoneUiSettings = PhoneUiSettings(
         soundsEnabled = preferences.getBoolean(PREF_SOUNDS_ENABLED, true),
+        speechLanguage = PhoneSpeechLanguage.entries.firstOrNull {
+            it.name == preferences.getString(PREF_SPEECH_LANGUAGE, PhoneSpeechLanguage.GERMAN.name)
+        } ?: PhoneSpeechLanguage.GERMAN,
     )
 
     fun save(settings: PhoneUiSettings) {
         preferences.edit()
             .putBoolean(PREF_SOUNDS_ENABLED, settings.soundsEnabled)
+            .putString(PREF_SPEECH_LANGUAGE, settings.speechLanguage.name)
             .apply()
     }
 }
@@ -314,8 +362,8 @@ private fun CompanionPhoneApp() {
     var consumedSpeechKey by rememberSaveable { mutableStateOf("") }
     var previousSnapshot by remember { mutableStateOf<CompanionScoreSnapshot?>(null) }
     val endEffect = remember(snapshot) { snapshot.toEndEffect() }
-    val speechAnnouncement = remember(snapshot, previousSnapshot) {
-        snapshot.toSpeechAnnouncement(previousSnapshot)
+    val speechAnnouncement = remember(snapshot, previousSnapshot, phoneSettings.speechLanguage) {
+        snapshot.toSpeechAnnouncement(previousSnapshot, phoneSettings.speechLanguage)
     }
 
     DisposableEffect(repository) {
@@ -343,6 +391,10 @@ private fun CompanionPhoneApp() {
 
     LaunchedEffect(snapshot.updatedAt, snapshot.matchStatus, snapshot.mePoints, snapshot.opponentPoints, snapshot.currentServerName) {
         previousSnapshot = snapshot
+    }
+
+    LaunchedEffect(phoneSettings.speechLanguage) {
+        speechPlayer.setLanguage(phoneSettings.speechLanguage)
     }
 
     LaunchedEffect(phoneSettings.soundsEnabled) {
@@ -449,6 +501,7 @@ private fun CompanionScoreScreen(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
     val serverName = snapshot.currentServerName.ifBlank { "-" }
+    val receiverName = snapshot.currentReceiverName.ifBlank { "-" }
     val setScore = "${snapshot.meSetsWon} - ${snapshot.opponentSetsWon}"
     Box(
         modifier = Modifier
@@ -459,6 +512,7 @@ private fun CompanionScoreScreen(
             LandscapeCompanionScoreLayout(
                 snapshot = snapshot,
                 serverName = serverName,
+                receiverName = receiverName,
                 setScore = setScore,
                 onOpenSettings = onOpenSettings,
             )
@@ -466,6 +520,7 @@ private fun CompanionScoreScreen(
             PortraitCompanionScoreLayout(
                 snapshot = snapshot,
                 serverName = serverName,
+                receiverName = receiverName,
                 setScore = setScore,
                 onOpenSettings = onOpenSettings,
             )
@@ -484,6 +539,7 @@ private fun CompanionScoreScreen(
 private fun PortraitCompanionScoreLayout(
     snapshot: CompanionScoreSnapshot,
     serverName: String,
+    receiverName: String,
     setScore: String,
     onOpenSettings: () -> Unit,
 ) {
@@ -499,7 +555,10 @@ private fun PortraitCompanionScoreLayout(
             ResultCard(snapshot = snapshot, setScore = setScore)
         }
 
-        ServingCard(serverName = serverName)
+        ServingCard(
+            serverName = serverName,
+            receiverName = if (snapshot.matchMode == PhoneMatchMode.DOUBLES) receiverName else null,
+        )
         SetScoreCard(setScore = setScore)
 
         Card(shape = RoundedCornerShape(24.dp)) {
@@ -515,16 +574,18 @@ private fun PortraitCompanionScoreLayout(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     ScoreTile(
-                        label = snapshot.meName,
+                        label = snapshot.meName.teamLabel(snapshot.matchMode),
                         value = snapshot.mePoints.toString(),
                         accent = Color(0xFFD9F99D),
-                        isServing = snapshot.meName == serverName,
+                        isServing = snapshot.currentServerTeamCode == "U",
+                        roleText = snapshot.roleTextForTeam("U"),
                     )
                     ScoreTile(
-                        label = snapshot.opponentName,
+                        label = snapshot.opponentName.teamLabel(snapshot.matchMode),
                         value = snapshot.opponentPoints.toString(),
                         accent = Color(0xFF93C5FD),
-                        isServing = snapshot.opponentName == serverName,
+                        isServing = snapshot.currentServerTeamCode == "O",
+                        roleText = snapshot.roleTextForTeam("O"),
                     )
                 }
 
@@ -539,6 +600,7 @@ private fun PortraitCompanionScoreLayout(
 private fun LandscapeCompanionScoreLayout(
     snapshot: CompanionScoreSnapshot,
     serverName: String,
+    receiverName: String,
     setScore: String,
     onOpenSettings: () -> Unit,
 ) {
@@ -565,16 +627,18 @@ private fun LandscapeCompanionScoreLayout(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     LandscapeScoreTile(
-                        label = snapshot.meName,
+                        label = snapshot.meName.teamLabel(snapshot.matchMode),
                         value = snapshot.mePoints.toString(),
                         accent = Color(0xFFD9F99D),
-                        isServing = snapshot.meName == serverName,
+                        isServing = snapshot.currentServerTeamCode == "U",
+                        roleText = snapshot.roleTextForTeam("U"),
                     )
                     LandscapeScoreTile(
-                        label = snapshot.opponentName,
+                        label = snapshot.opponentName.teamLabel(snapshot.matchMode),
                         value = snapshot.opponentPoints.toString(),
                         accent = Color(0xFF93C5FD),
-                        isServing = snapshot.opponentName == serverName,
+                        isServing = snapshot.currentServerTeamCode == "O",
+                        roleText = snapshot.roleTextForTeam("O"),
                     )
                 }
             }
@@ -587,7 +651,11 @@ private fun LandscapeCompanionScoreLayout(
             if (snapshot.isSetComplete || snapshot.isMatchComplete) {
                 ResultCard(snapshot = snapshot, setScore = setScore)
             }
-            ServingCard(serverName = serverName, compact = true)
+            ServingCard(
+                serverName = serverName,
+                receiverName = if (snapshot.matchMode == PhoneMatchMode.DOUBLES) receiverName else null,
+                compact = true,
+            )
             SetScoreCard(setScore = setScore, compact = true)
             Card(shape = RoundedCornerShape(24.dp)) {
                 Column(
@@ -652,6 +720,7 @@ private fun PhoneSettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
@@ -691,12 +760,84 @@ private fun PhoneSettingsScreen(
                     )
                 }
             }
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF18212B))
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Speech language",
+                            color = Color.White,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "Choose whether the phone speaks German or English.",
+                            color = Color(0xFF9CA3AF),
+                            fontSize = 16.sp,
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        SpeechLanguageButton(
+                            language = PhoneSpeechLanguage.GERMAN,
+                            selected = settings.speechLanguage == PhoneSpeechLanguage.GERMAN,
+                            onSelect = {
+                                onSettingsChange(settings.copy(speechLanguage = PhoneSpeechLanguage.GERMAN))
+                            },
+                        )
+                        SpeechLanguageButton(
+                            language = PhoneSpeechLanguage.ENGLISH,
+                            selected = settings.speechLanguage == PhoneSpeechLanguage.ENGLISH,
+                            onSelect = {
+                                onSettingsChange(settings.copy(speechLanguage = PhoneSpeechLanguage.ENGLISH))
+                            },
+                        )
+                    }
+                }
+            }
             Button(
                 onClick = onDone,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Done")
             }
+            Box(modifier = Modifier.padding(bottom = 12.dp))
+        }
+    }
+}
+
+@Composable
+private fun RowScope.SpeechLanguageButton(
+    language: PhoneSpeechLanguage,
+    selected: Boolean,
+    onSelect: () -> Unit,
+) {
+    if (selected) {
+        Button(
+            onClick = onSelect,
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(
+                text = language.label(),
+                fontSize = 16.sp,
+            )
+        }
+    } else {
+        OutlinedButton(
+            onClick = onSelect,
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(
+                text = language.label(),
+                fontSize = 16.sp,
+            )
         }
     }
 }
@@ -704,10 +845,11 @@ private fun PhoneSettingsScreen(
 @Composable
 private fun ServingCard(
     serverName: String,
+    receiverName: String? = null,
     compact: Boolean = false,
 ) {
     Card(shape = RoundedCornerShape(24.dp)) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF10243A))
@@ -715,22 +857,48 @@ private fun ServingCard(
                     horizontal = if (compact) 18.dp else 20.dp,
                     vertical = if (compact) 14.dp else 16.dp,
                 ),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(if (receiverName == null) 0.dp else 8.dp),
         ) {
-            Text(
-                text = "Serving",
-                color = Color(0xFF93C5FD),
-                fontSize = if (compact) 16.sp else 18.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = serverName,
-                color = Color.White,
-                fontSize = if (compact) 24.sp else 28.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.End,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Server",
+                    color = Color(0xFF93C5FD),
+                    fontSize = if (compact) 16.sp else 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = serverName,
+                    color = Color.White,
+                    fontSize = if (compact) 24.sp else 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.End,
+                )
+            }
+            receiverName?.let { activeReceiver ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Receiver",
+                        color = Color(0xFF9CA3AF),
+                        fontSize = if (compact) 14.sp else 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = activeReceiver,
+                        color = Color.White,
+                        fontSize = if (compact) 18.sp else 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.End,
+                    )
+                }
+            }
         }
     }
 }
@@ -910,9 +1078,9 @@ private fun CompanionScoreSnapshot.toEndEffect(): PhoneEndEffect? {
     val youWon = winner == meName
     val type = when {
         isMatchComplete && youWon -> PhoneEndEffectType.HAPPY_MATCH
-        isMatchComplete -> PhoneEndEffectType.NEUTRAL_MATCH
+        isMatchComplete -> PhoneEndEffectType.SAD_MATCH
         isSetComplete && youWon -> PhoneEndEffectType.HAPPY_SET
-        isSetComplete -> PhoneEndEffectType.NEUTRAL_SET
+        isSetComplete -> PhoneEndEffectType.SAD_SET
         else -> return null
     }
     return PhoneEndEffect(
@@ -923,6 +1091,7 @@ private fun CompanionScoreSnapshot.toEndEffect(): PhoneEndEffect? {
 
 private fun CompanionScoreSnapshot.toSpeechAnnouncement(
     previous: CompanionScoreSnapshot?,
+    language: PhoneSpeechLanguage,
 ): PhoneSpeechAnnouncement? {
     if (!hasData || previous == null || !previous.hasData) return null
 
@@ -930,63 +1099,163 @@ private fun CompanionScoreSnapshot.toSpeechAnnouncement(
     val transitionedToSetComplete = isSetComplete && !isMatchComplete && !previous.isSetComplete
     val pointsChanged = mePoints != previous.mePoints || opponentPoints != previous.opponentPoints
     val serveChanged = currentServerName.isNotBlank() && currentServerName != previous.currentServerName
+    val matchBallPlayer = enteredMatchBallPlayer(previous)
+    val setBallPlayer = enteredSetBallPlayer(previous)
 
     return when {
         transitionedToMatchComplete -> {
             val winner = winnerName ?: return null
             PhoneSpeechAnnouncement(
-                text = "$winner gewinnt das Match mit ${winnerFirstSetScoreText()} Sätzen.",
+                text = language.matchWonText(winner, winnerFirstSetScoreText(language)),
                 key = "match|$updatedAt|$matchStatus",
             )
         }
         transitionedToSetComplete -> {
             val winner = winnerName ?: return null
             PhoneSpeechAnnouncement(
-                text = "$winner gewinnt den Satz mit ${winnerFirstPointScoreText()}. Satzstand ${winnerFirstSetScoreText()}.",
+                text = language.setWonText(
+                    winner = winner,
+                    pointScore = winnerFirstPointScoreText(language),
+                    setScore = winnerFirstSetScoreText(language),
+                ),
                 key = "set|$updatedAt|$matchStatus",
             )
         }
         pointsChanged -> {
             PhoneSpeechAnnouncement(
-                text = spokenBallScoreText(serveChanged),
-                key = "ball|$updatedAt|$mePoints|$opponentPoints|$currentServerName",
+                text = pointUpdateText(
+                    language = language,
+                    includeServeChange = serveChanged,
+                    setBallPlayer = setBallPlayer,
+                    matchBallPlayer = matchBallPlayer,
+                ),
+                key = "ball|$updatedAt|$mePoints|$opponentPoints|$currentServerName|${matchBallPlayer ?: setBallPlayer ?: "-"}",
             )
         }
         else -> null
     }
 }
 
-private fun CompanionScoreSnapshot.spokenBallScoreText(
+private fun CompanionScoreSnapshot.pointUpdateText(
+    language: PhoneSpeechLanguage,
     includeServeChange: Boolean,
+    setBallPlayer: String?,
+    matchBallPlayer: String?,
 ): String {
-    val scoreText = if (currentServerName == opponentName) {
-        "$opponentPoints zu $mePoints"
-    } else {
-        "$mePoints zu $opponentPoints"
+    val phrases = mutableListOf(spokenBallScoreText(language))
+    if (includeServeChange) {
+        phrases += language.serveChangeText(currentServerName)
     }
-    return if (includeServeChange) {
-        "$scoreText. Aufschlag $currentServerName."
-    } else {
-        scoreText
+    when {
+        matchBallPlayer != null -> phrases += language.matchBallText(matchBallPlayer)
+        setBallPlayer != null -> phrases += language.setBallText(setBallPlayer)
     }
+    return phrases.joinToString(" ")
 }
 
-private fun CompanionScoreSnapshot.winnerFirstPointScoreText(): String {
+private fun CompanionScoreSnapshot.spokenBallScoreText(language: PhoneSpeechLanguage): String {
+    val opponentServing = currentServerTeamCode == "O"
+    val first = if (opponentServing) opponentPoints else mePoints
+    val second = if (opponentServing) mePoints else opponentPoints
+    return language.scoreText(first, second)
+}
+
+private fun CompanionScoreSnapshot.winnerFirstPointScoreText(language: PhoneSpeechLanguage): String {
     val winner = winnerName ?: return "$mePoints-$opponentPoints"
     return if (winner == meName) {
-        "$mePoints zu $opponentPoints"
+        language.scoreText(mePoints, opponentPoints)
     } else {
-        "$opponentPoints zu $mePoints"
+        language.scoreText(opponentPoints, mePoints)
     }
 }
 
-private fun CompanionScoreSnapshot.winnerFirstSetScoreText(): String {
+private fun CompanionScoreSnapshot.winnerFirstSetScoreText(language: PhoneSpeechLanguage): String {
     val winner = winnerName ?: return "$meSetsWon zu $opponentSetsWon"
     return if (winner == meName) {
-        "$meSetsWon zu $opponentSetsWon"
+        language.scoreText(meSetsWon, opponentSetsWon)
     } else {
-        "$opponentSetsWon zu $meSetsWon"
+        language.scoreText(opponentSetsWon, meSetsWon)
     }
+}
+
+private fun CompanionScoreSnapshot.enteredSetBallPlayer(previous: CompanionScoreSnapshot): String? {
+    if (isSetComplete || isMatchComplete || !hasData) return null
+    return when {
+        isSetBallForMe() && !previous.isSetBallForMe() -> meName
+        isSetBallForOpponent() && !previous.isSetBallForOpponent() -> opponentName
+        else -> null
+    }
+}
+
+private fun CompanionScoreSnapshot.enteredMatchBallPlayer(previous: CompanionScoreSnapshot): String? {
+    if (isSetComplete || isMatchComplete || !hasData) return null
+    return when {
+        isMatchBallForMe() && !previous.isMatchBallForMe() -> meName
+        isMatchBallForOpponent() && !previous.isMatchBallForOpponent() -> opponentName
+        else -> null
+    }
+}
+
+private fun CompanionScoreSnapshot.isSetBallForMe(): Boolean = isSetBall(mePoints, opponentPoints)
+
+private fun CompanionScoreSnapshot.isSetBallForOpponent(): Boolean = isSetBall(opponentPoints, mePoints)
+
+private fun CompanionScoreSnapshot.isMatchBallForMe(): Boolean =
+    meSetsWon == setsToWinMatch - 1 && isSetBallForMe()
+
+private fun CompanionScoreSnapshot.isMatchBallForOpponent(): Boolean =
+    opponentSetsWon == setsToWinMatch - 1 && isSetBallForOpponent()
+
+private fun isSetBall(playerPoints: Int, opponentPoints: Int): Boolean =
+    playerPoints >= 10 && playerPoints - opponentPoints >= 1
+
+private fun PhoneSpeechLanguage.scoreText(first: Int, second: Int): String = when (this) {
+    PhoneSpeechLanguage.GERMAN -> "$first zu $second"
+    PhoneSpeechLanguage.ENGLISH -> "$first to $second"
+}
+
+private fun PhoneSpeechLanguage.serveChangeText(serverName: String): String = when (this) {
+    PhoneSpeechLanguage.GERMAN -> "Aufschlag $serverName."
+    PhoneSpeechLanguage.ENGLISH -> "Serving $serverName."
+}
+
+private fun PhoneSpeechLanguage.setBallText(playerName: String): String = when (this) {
+    PhoneSpeechLanguage.GERMAN -> "Satzball ${playerName.forSpeech(this)}."
+    PhoneSpeechLanguage.ENGLISH -> "Set point ${playerName.forSpeech(this)}."
+}
+
+private fun PhoneSpeechLanguage.matchBallText(playerName: String): String = when (this) {
+    PhoneSpeechLanguage.GERMAN -> "Matchball ${playerName.forSpeech(this)}."
+    PhoneSpeechLanguage.ENGLISH -> "Match point ${playerName.forSpeech(this)}."
+}
+
+private fun PhoneSpeechLanguage.setWonText(
+    winner: String,
+    pointScore: String,
+    setScore: String,
+): String = when (this) {
+    PhoneSpeechLanguage.GERMAN -> "${winner.forSpeech(this)} gewinnt den Satz mit $pointScore. Satzstand $setScore."
+    PhoneSpeechLanguage.ENGLISH -> "${winner.forSpeech(this)} wins the set, $pointScore. Set score $setScore."
+}
+
+private fun PhoneSpeechLanguage.matchWonText(winner: String, setScore: String): String = when (this) {
+    PhoneSpeechLanguage.GERMAN -> "${winner.forSpeech(this)} gewinnt das Match mit $setScore Sätzen."
+    PhoneSpeechLanguage.ENGLISH -> "${winner.forSpeech(this)} wins the match, $setScore in sets."
+}
+
+private fun PhoneSpeechLanguage.label(): String = when (this) {
+    PhoneSpeechLanguage.GERMAN -> "German"
+    PhoneSpeechLanguage.ENGLISH -> "English"
+}
+
+private fun String.forSpeech(language: PhoneSpeechLanguage): String = when (language) {
+    PhoneSpeechLanguage.GERMAN -> replace(" / ", " und ").replace('\n', ' ')
+    PhoneSpeechLanguage.ENGLISH -> replace(" / ", " and ").replace('\n', ' ')
+}
+
+private fun String.teamLabel(matchMode: PhoneMatchMode): String = when (matchMode) {
+    PhoneMatchMode.SINGLES -> this
+    PhoneMatchMode.DOUBLES -> replace(" / ", "\n")
 }
 
 @Composable
@@ -1037,6 +1306,7 @@ private fun RowScope.LandscapeScoreTile(
     value: String,
     accent: Color,
     isServing: Boolean,
+    roleText: String?,
 ) {
     Column(
         modifier = Modifier
@@ -1059,18 +1329,30 @@ private fun RowScope.LandscapeScoreTile(
             Text(
                 text = label,
                 color = Color(0xFFD1D5DB),
-                fontSize = 28.sp,
+                fontSize = if ('\n' in label) 22.sp else 28.sp,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
-                maxLines = 1,
+                maxLines = if ('\n' in label) 2 else 1,
             )
-            if (isServing) {
-                Text(
-                    text = "SERVING",
-                    color = accent,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                )
+            when {
+                roleText != null -> {
+                    Text(
+                        text = roleText,
+                        color = accent,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                    )
+                }
+                isServing -> {
+                    Text(
+                        text = "SERVING",
+                        color = accent,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
         Text(
@@ -1089,6 +1371,7 @@ private fun RowScope.ScoreTile(
     value: String,
     accent: Color,
     isServing: Boolean,
+    roleText: String?,
 ) {
     Column(
         modifier = Modifier
@@ -1106,16 +1389,29 @@ private fun RowScope.ScoreTile(
         Text(
             text = label,
             color = Color(0xFFD1D5DB),
-            fontSize = 22.sp,
+            fontSize = if ('\n' in label) 18.sp else 22.sp,
             textAlign = TextAlign.Center,
+            maxLines = if ('\n' in label) 2 else 1,
         )
-        if (isServing) {
-            Text(
-                text = "SERVING",
-                color = accent,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-            )
+        when {
+            roleText != null -> {
+                Text(
+                    text = roleText,
+                    color = accent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                )
+            }
+            isServing -> {
+                Text(
+                    text = "SERVING",
+                    color = accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
         Text(
             text = value,
@@ -1155,13 +1451,19 @@ private fun DetailRow(
 private fun com.google.android.gms.wearable.DataItem.toSnapshot(): CompanionScoreSnapshot {
     val dataMap = DataMapItem.fromDataItem(this).dataMap
     return CompanionScoreSnapshot(
+        matchMode = dataMap.getString(CompanionScoreKeys.matchMode)?.let {
+            PhoneMatchMode.entries.firstOrNull { mode -> mode.name == it }
+        } ?: PhoneMatchMode.SINGLES,
         meName = dataMap.getString(CompanionScoreKeys.meName) ?: "Me",
         opponentName = dataMap.getString(CompanionScoreKeys.opponentName) ?: "Opponent",
         mePoints = dataMap.getInt(CompanionScoreKeys.mePoints),
         opponentPoints = dataMap.getInt(CompanionScoreKeys.opponentPoints),
         currentServerName = dataMap.getString(CompanionScoreKeys.currentServerName).orEmpty(),
+        currentServerTeamCode = dataMap.getString(CompanionScoreKeys.currentServerTeam).orEmpty(),
+        currentReceiverName = dataMap.getString(CompanionScoreKeys.currentReceiverName).orEmpty(),
         meSetsWon = dataMap.getInt(CompanionScoreKeys.meSetsWon),
         opponentSetsWon = dataMap.getInt(CompanionScoreKeys.opponentSetsWon),
+        setsToWinMatch = dataMap.getInt(CompanionScoreKeys.setsToWinMatch).coerceAtLeast(2),
         currentSetNumber = dataMap.getInt(CompanionScoreKeys.currentSetNumber).coerceAtLeast(1),
         matchStatus = dataMap.getString(CompanionScoreKeys.matchStatus) ?: "Waiting for watch score",
         updatedAt = dataMap.getLong(CompanionScoreKeys.updatedAt),
@@ -1171,13 +1473,17 @@ private fun com.google.android.gms.wearable.DataItem.toSnapshot(): CompanionScor
 private const val COMPANION_SCORE_PATH = "/tt_score/current_state"
 
 private object CompanionScoreKeys {
+    const val matchMode = "match_mode"
     const val meName = "me_name"
     const val opponentName = "opponent_name"
     const val mePoints = "me_points"
     const val opponentPoints = "opponent_points"
     const val currentServerName = "current_server_name"
+    const val currentServerTeam = "current_server_team"
+    const val currentReceiverName = "current_receiver_name"
     const val meSetsWon = "me_sets_won"
     const val opponentSetsWon = "opponent_sets_won"
+    const val setsToWinMatch = "sets_to_win_match"
     const val currentSetNumber = "current_set_number"
     const val matchStatus = "match_status"
     const val updatedAt = "updated_at"
@@ -1185,3 +1491,4 @@ private object CompanionScoreKeys {
 
 private const val PHONE_SETTINGS_PREFS = "tt_score_phone_settings"
 private const val PREF_SOUNDS_ENABLED = "sounds_enabled"
+private const val PREF_SPEECH_LANGUAGE = "speech_language"

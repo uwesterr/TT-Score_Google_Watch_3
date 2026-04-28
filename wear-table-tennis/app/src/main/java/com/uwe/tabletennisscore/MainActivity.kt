@@ -97,12 +97,17 @@ private enum class AppScreen {
 
 private enum class SpeechTarget {
     ME,
+    MY_PARTNER,
     OPPONENT,
+    OPPONENT_PARTNER,
 }
 
 private data class SettingsDraft(
+    val matchMode: MatchMode,
     val meName: String,
+    val myPartnerName: String,
     val opponentName: String,
+    val opponentPartnerName: String,
     val matchFormat: MatchFormat,
     val hapticsEnabled: Boolean,
     val soundsEnabled: Boolean,
@@ -110,8 +115,11 @@ private data class SettingsDraft(
 ) {
     companion object {
         fun from(settings: AppSettings) = SettingsDraft(
+            matchMode = settings.matchMode,
             meName = settings.meName,
+            myPartnerName = settings.myPartnerName,
             opponentName = settings.opponentName,
+            opponentPartnerName = settings.opponentPartnerName,
             matchFormat = settings.matchFormat,
             hapticsEnabled = settings.hapticsEnabled,
             soundsEnabled = settings.soundsEnabled,
@@ -120,8 +128,11 @@ private data class SettingsDraft(
     }
 
     fun toSettings(): AppSettings = AppSettings.sanitize(
+        matchMode = matchMode,
         meName = meName,
+        myPartnerName = myPartnerName,
         opponentName = opponentName,
+        opponentPartnerName = opponentPartnerName,
         setsToWinMatch = matchFormat.setsToWinMatch,
         hapticsEnabled = hapticsEnabled,
         soundsEnabled = soundsEnabled,
@@ -140,6 +151,12 @@ private data class EndEffect(
     val type: EndEffectType,
     val token: String,
 )
+
+private enum class DoublesPromptStep {
+    CHOOSE_PAIR,
+    CHOOSE_SERVER,
+    CHOOSE_RECEIVER,
+}
 
 private class EndSoundPlayer(context: Context) {
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -226,6 +243,9 @@ fun TableTennisApp() {
     var settingsHydrated by rememberSaveable { mutableStateOf(false) }
     var consumedEndEffectToken by rememberSaveable { mutableStateOf("") }
     var speechTarget by remember { mutableStateOf<SpeechTarget?>(null) }
+    var doublesPromptStep by rememberSaveable { mutableStateOf(DoublesPromptStep.CHOOSE_PAIR) }
+    var doublesPromptServingTeamCode by rememberSaveable { mutableStateOf("") }
+    var doublesPromptServerSeatCode by rememberSaveable { mutableStateOf("") }
 
     val speechLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
@@ -238,7 +258,9 @@ fun TableTennisApp() {
         if (spokenText.isNotBlank()) {
             settingsDraft = when (speechTarget) {
                 SpeechTarget.ME -> settingsDraft.copy(meName = spokenText)
+                SpeechTarget.MY_PARTNER -> settingsDraft.copy(myPartnerName = spokenText)
                 SpeechTarget.OPPONENT -> settingsDraft.copy(opponentName = spokenText)
+                SpeechTarget.OPPONENT_PARTNER -> settingsDraft.copy(opponentPartnerName = spokenText)
                 null -> settingsDraft
             }
         }
@@ -249,9 +271,12 @@ fun TableTennisApp() {
         settingsDraft = SettingsDraft.from(settings)
     }
 
-    LaunchedEffect(settings.setsToWinMatch) {
+    LaunchedEffect(settings.matchMode, settings.setsToWinMatch) {
         if (!settingsHydrated && state.isPristine()) {
-            state = state.copy(setsToWinMatch = settings.setsToWinMatch)
+            state = state.copy(
+                setsToWinMatch = settings.setsToWinMatch,
+                matchMode = settings.matchMode,
+            )
             settingsHydrated = true
         }
     }
@@ -275,17 +300,44 @@ fun TableTennisApp() {
         }
     }
 
+    LaunchedEffect(state.currentSetIndex, state.matchMode) {
+        if (state.matchMode == MatchMode.DOUBLES && !state.currentSet.isReady(MatchMode.DOUBLES)) {
+            doublesPromptStep = if (state.currentSetIndex == 0) {
+                DoublesPromptStep.CHOOSE_PAIR
+            } else {
+                DoublesPromptStep.CHOOSE_SERVER
+            }
+            doublesPromptServingTeamCode = ""
+            doublesPromptServerSeatCode = ""
+        }
+    }
+
     fun performHaptic(type: HapticFeedbackType) {
         if (settings.hapticsEnabled) {
             haptics.performHapticFeedback(type)
         }
     }
 
-    fun newMatch() {
-        state = MatchRules.newMatch(settings)
+    fun resetDoublesPrompt(setIndex: Int = state.currentSetIndex) {
+        doublesPromptStep = if (setIndex == 0) {
+            DoublesPromptStep.CHOOSE_PAIR
+        } else {
+            DoublesPromptStep.CHOOSE_SERVER
+        }
+        doublesPromptServingTeamCode = ""
+        doublesPromptServerSeatCode = ""
+    }
+
+    fun newMatchWithSettings(targetSettings: AppSettings) {
+        state = MatchRules.newMatch(targetSettings)
         activeCue = null
         consumedEndEffectToken = ""
+        resetDoublesPrompt(setIndex = 0)
         screen = AppScreen.MATCH
+    }
+
+    fun newMatch() {
+        newMatchWithSettings(settings)
     }
 
     fun launchSpeechInput(target: SpeechTarget) {
@@ -294,7 +346,12 @@ fun TableTennisApp() {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
             putExtra(
                 RecognizerIntent.EXTRA_PROMPT,
-                if (target == SpeechTarget.ME) "Speak your name" else "Speak opponent name",
+                when (target) {
+                    SpeechTarget.ME -> "Speak your name"
+                    SpeechTarget.MY_PARTNER -> "Speak partner name"
+                    SpeechTarget.OPPONENT -> "Speak opponent name"
+                    SpeechTarget.OPPONENT_PARTNER -> "Speak opponent partner name"
+                },
             )
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
@@ -334,11 +391,26 @@ fun TableTennisApp() {
                     onSpeechInput = ::launchSpeechInput,
                     onSave = {
                         val sanitized = settingsDraft.toSettings()
-                        if (state.isPristine()) {
-                            state = state.copy(setsToWinMatch = sanitized.setsToWinMatch)
+                        val modeChanged = sanitized.matchMode != settings.matchMode
+                        if (modeChanged) {
+                            newMatchWithSettings(sanitized)
+                        } else if (state.isPristine()) {
+                            state = state.copy(
+                                setsToWinMatch = sanitized.setsToWinMatch,
+                                matchMode = sanitized.matchMode,
+                            )
                         }
                         scope.launch {
                             settingsStore.save(sanitized)
+                        }
+                        if (!modeChanged && sanitized.matchMode == MatchMode.DOUBLES) {
+                            doublesPromptStep = if (state.currentSetIndex == 0) {
+                                DoublesPromptStep.CHOOSE_PAIR
+                            } else {
+                                DoublesPromptStep.CHOOSE_SERVER
+                            }
+                            doublesPromptServingTeamCode = ""
+                            doublesPromptServerSeatCode = ""
                         }
                         screen = AppScreen.MATCH
                     },
@@ -349,12 +421,63 @@ fun TableTennisApp() {
                 )
 
                 AppScreen.MATCH -> when {
-                    state.currentSet.firstServer == null -> ServePromptScreen(
+                    state.matchMode == MatchMode.SINGLES && state.currentSet.firstServer == null -> ServePromptScreen(
                         setNumber = state.currentSetIndex + 1,
                         settings = settings,
                         onChoose = { player -> state = MatchRules.chooseFirstServer(state, player) },
                         onOpenSettings = { screen = AppScreen.SETTINGS },
                     )
+
+                    state.matchMode == MatchMode.DOUBLES && !state.currentSet.isReady(MatchMode.DOUBLES) ->
+                        DoublesServePromptScreen(
+                            setNumber = state.currentSetIndex + 1,
+                            settings = settings,
+                            servingTeam = MatchRules.entitledServingTeam(state)?.also {
+                                doublesPromptServingTeamCode = it.code
+                            } ?: Player.fromCode(doublesPromptServingTeamCode),
+                            step = doublesPromptStep,
+                            chosenServer = DoublesSeat.fromCode(doublesPromptServerSeatCode),
+                            derivedFirstReceiver = DoublesSeat.fromCode(doublesPromptServerSeatCode)?.let {
+                                MatchRules.derivedFirstReceiverForCurrentSet(state, it)
+                            },
+                            onChooseTeam = { team ->
+                                doublesPromptServingTeamCode = team.code
+                                doublesPromptStep = DoublesPromptStep.CHOOSE_SERVER
+                            },
+                            onChooseServer = { seat ->
+                                doublesPromptServerSeatCode = seat.code
+                                val derivedReceiver = MatchRules.derivedFirstReceiverForCurrentSet(state, seat)
+                                if (derivedReceiver != null) {
+                                    state = MatchRules.chooseDoublesOpening(state, seat, derivedReceiver)
+                                    doublesPromptServerSeatCode = ""
+                                } else {
+                                    doublesPromptStep = DoublesPromptStep.CHOOSE_RECEIVER
+                                }
+                            },
+                            onChooseReceiver = { receiver ->
+                                val server = DoublesSeat.fromCode(doublesPromptServerSeatCode)
+                                if (server != null) {
+                                    state = MatchRules.chooseDoublesOpening(state, server, receiver)
+                                    doublesPromptServerSeatCode = ""
+                                }
+                            },
+                            onBack = {
+                                when (doublesPromptStep) {
+                                    DoublesPromptStep.CHOOSE_PAIR -> Unit
+                                    DoublesPromptStep.CHOOSE_SERVER -> {
+                                        if (state.currentSetIndex == 0) {
+                                            doublesPromptStep = DoublesPromptStep.CHOOSE_PAIR
+                                            doublesPromptServingTeamCode = ""
+                                        }
+                                    }
+                                    DoublesPromptStep.CHOOSE_RECEIVER -> {
+                                        doublesPromptStep = DoublesPromptStep.CHOOSE_SERVER
+                                        doublesPromptServerSeatCode = ""
+                                    }
+                                }
+                            },
+                            onOpenSettings = { screen = AppScreen.SETTINGS },
+                        )
 
                     state.matchWinner != null -> MatchOverScreen(
                         state = state,
@@ -379,6 +502,7 @@ fun TableTennisApp() {
                             state = MatchRules.startNextSet(state)
                             activeCue = null
                             consumedEndEffectToken = ""
+                            resetDoublesPrompt(setIndex = state.currentSetIndex + 1)
                         },
                         onUndo = {
                             state = MatchRules.undoLastPoint(state)
@@ -465,6 +589,149 @@ private fun ServePromptScreen(
 }
 
 @Composable
+private fun DoublesServePromptScreen(
+    setNumber: Int,
+    settings: AppSettings,
+    servingTeam: Player?,
+    step: DoublesPromptStep,
+    chosenServer: DoublesSeat?,
+    derivedFirstReceiver: DoublesSeat?,
+    onChooseTeam: (Player) -> Unit,
+    onChooseServer: (DoublesSeat) -> Unit,
+    onChooseReceiver: (DoublesSeat) -> Unit,
+    onBack: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val selectableServingTeam = servingTeam
+    val title = when (step) {
+        DoublesPromptStep.CHOOSE_PAIR -> "Who serves first?"
+        DoublesPromptStep.CHOOSE_SERVER -> "First server?"
+        DoublesPromptStep.CHOOSE_RECEIVER -> "First receiver?"
+    }
+    val subtitle = when (step) {
+        DoublesPromptStep.CHOOSE_PAIR -> "Choose the team that opens set $setNumber."
+        DoublesPromptStep.CHOOSE_SERVER -> {
+            if (setNumber == 1) {
+                "Choose the player who serves first."
+            } else {
+                "Choose the player who serves first. ${derivedFirstReceiver?.let { "Receiver: ${settings.seatName(it)}." } ?: ""}".trim()
+            }
+        }
+        DoublesPromptStep.CHOOSE_RECEIVER -> "Choose the first receiver."
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("doublesServePrompt"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            StatusPill(text = "Set $setNumber")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (step != DoublesPromptStep.CHOOSE_PAIR || setNumber == 1) {
+                    GhostButton(
+                        label = "Back",
+                        modifier = Modifier.testTag("doublesPromptBack"),
+                        enabled = step != DoublesPromptStep.CHOOSE_PAIR,
+                        onClick = onBack,
+                    )
+                }
+                GhostButton(
+                    label = "Set",
+                    modifier = Modifier.testTag("openSettingsFromPrompt"),
+                    onClick = onOpenSettings,
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = title,
+            color = AppColors.text,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = subtitle,
+            color = AppColors.muted,
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 6.dp),
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        when (step) {
+            DoublesPromptStep.CHOOSE_PAIR -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ActionButton(
+                        label = settings.displayName(Player.UWE),
+                        modifier = Modifier.weight(1f).testTag("serveUwe"),
+                        color = AppColors.uwe,
+                        onClick = { onChooseTeam(Player.UWE) },
+                    )
+                    ActionButton(
+                        label = settings.displayName(Player.OPPONENT),
+                        modifier = Modifier.weight(1f).testTag("serveOpponent"),
+                        color = AppColors.opponent,
+                        onClick = { onChooseTeam(Player.OPPONENT) },
+                    )
+                }
+            }
+
+            DoublesPromptStep.CHOOSE_SERVER -> {
+                val options = selectableServingTeam?.let(::doublesSeatsForTeam).orEmpty()
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    options.forEach { seat ->
+                        val color = if (seat.team == Player.UWE) AppColors.uwe else AppColors.opponent
+                        ActionButton(
+                            label = settings.seatName(seat),
+                            color = color,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("doublesServer${seat.code}"),
+                            onClick = { onChooseServer(seat) },
+                        )
+                    }
+                }
+            }
+
+            DoublesPromptStep.CHOOSE_RECEIVER -> {
+                val server = chosenServer
+                val options = server?.team?.other()?.let(::doublesSeatsForTeam).orEmpty()
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    options.forEach { seat ->
+                        val color = if (seat.team == Player.UWE) AppColors.uwe else AppColors.opponent
+                        ActionButton(
+                            label = settings.seatName(seat),
+                            color = color,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("doublesReceiver${seat.code}"),
+                            onClick = { onChooseReceiver(seat) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ScoreScreen(
     state: MatchState,
     settings: AppSettings,
@@ -520,7 +787,9 @@ private fun ScoreboardPage(
     onNewMatch: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    val server = MatchRules.currentServer(state.currentSet)
+    val serverTeam = MatchRules.currentServer(state)
+    val doublesServer = if (state.matchMode == MatchMode.DOUBLES) MatchRules.currentDoublesServer(state.currentSet) else null
+    val doublesReceiver = if (state.matchMode == MatchMode.DOUBLES) MatchRules.currentDoublesReceiver(state.currentSet) else null
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -533,8 +802,20 @@ private fun ScoreboardPage(
             onNewMatch = onNewMatch,
             onOpenSettings = onOpenSettings,
         )
-        CueAndServerArea(activeCue = activeCue, server = server, settings = settings)
-        ScoreBoard(set = state.currentSet, server = server, settings = settings)
+        CueAndServerArea(
+            activeCue = activeCue,
+            matchMode = state.matchMode,
+            server = serverTeam,
+            doublesServer = doublesServer,
+            doublesReceiver = doublesReceiver,
+            settings = settings,
+        )
+        ScoreBoard(
+            set = state.currentSet,
+            server = serverTeam,
+            matchMode = state.matchMode,
+            settings = settings,
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -793,23 +1074,56 @@ private fun SettingsScreen(
             fontWeight = FontWeight.Bold,
         )
         Spacer(modifier = Modifier.height(10.dp))
+        SettingsSegmentedRow(
+            label = "Mode",
+            first = MatchMode.SINGLES.label,
+            second = MatchMode.DOUBLES.label,
+            firstSelected = draft.matchMode == MatchMode.SINGLES,
+            firstTag = "modeSingles",
+            secondTag = "modeDoubles",
+            onFirst = { onDraftChange(draft.copy(matchMode = MatchMode.SINGLES)) },
+            onSecond = { onDraftChange(draft.copy(matchMode = MatchMode.DOUBLES)) },
+        )
+        Spacer(modifier = Modifier.height(10.dp))
         NameField(
-            label = "Me",
+            label = if (draft.matchMode == MatchMode.SINGLES) "Me" else "Home 1",
             value = draft.meName,
             tag = "settingsMeName",
             onValueChange = { onDraftChange(draft.copy(meName = it)) },
             speechTag = "settingsMeSpeech",
             onSpeechInput = { onSpeechInput(SpeechTarget.ME) },
         )
+        if (draft.matchMode == MatchMode.DOUBLES) {
+            Spacer(modifier = Modifier.height(8.dp))
+            NameField(
+                label = "Home 2",
+                value = draft.myPartnerName,
+                tag = "settingsMyPartnerName",
+                onValueChange = { onDraftChange(draft.copy(myPartnerName = it)) },
+                speechTag = "settingsMyPartnerSpeech",
+                onSpeechInput = { onSpeechInput(SpeechTarget.MY_PARTNER) },
+            )
+        }
         Spacer(modifier = Modifier.height(8.dp))
         NameField(
-            label = "Opponent",
+            label = if (draft.matchMode == MatchMode.SINGLES) "Opponent" else "Away 1",
             value = draft.opponentName,
             tag = "settingsOpponentName",
             onValueChange = { onDraftChange(draft.copy(opponentName = it)) },
             speechTag = "settingsOpponentSpeech",
             onSpeechInput = { onSpeechInput(SpeechTarget.OPPONENT) },
         )
+        if (draft.matchMode == MatchMode.DOUBLES) {
+            Spacer(modifier = Modifier.height(8.dp))
+            NameField(
+                label = "Away 2",
+                value = draft.opponentPartnerName,
+                tag = "settingsOpponentPartnerName",
+                onValueChange = { onDraftChange(draft.copy(opponentPartnerName = it)) },
+                speechTag = "settingsOpponentPartnerSpeech",
+                onSpeechInput = { onSpeechInput(SpeechTarget.OPPONENT_PARTNER) },
+            )
+        }
         Spacer(modifier = Modifier.height(10.dp))
         SettingsSegmentedRow(
             label = "Match",
@@ -1252,7 +1566,10 @@ private fun HeaderRow(
 @Composable
 private fun CueAndServerArea(
     activeCue: MatchCue?,
+    matchMode: MatchMode,
     server: Player?,
+    doublesServer: DoublesSeat?,
+    doublesReceiver: DoublesSeat?,
     settings: AppSettings,
 ) {
     Column(
@@ -1282,29 +1599,46 @@ private fun CueAndServerArea(
                 }
             }
         }
-        ServerIndicator(server = server, settings = settings)
+        ServerIndicator(
+            matchMode = matchMode,
+            server = server,
+            doublesServer = doublesServer,
+            doublesReceiver = doublesReceiver,
+            settings = settings,
+        )
     }
 }
 
 @Composable
 private fun ServerIndicator(
+    matchMode: MatchMode,
     server: Player?,
+    doublesServer: DoublesSeat?,
+    doublesReceiver: DoublesSeat?,
     settings: AppSettings,
 ) {
+    val text = when (matchMode) {
+        MatchMode.SINGLES -> "Serving: ${server?.let(settings::displayName) ?: "-"}"
+        MatchMode.DOUBLES -> {
+            val serverName = doublesServer?.let(settings::seatName) ?: "-"
+            val receiverName = doublesReceiver?.let(settings::seatName) ?: "-"
+            "Server: $serverName\nReceiver: $receiverName"
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(28.dp)
+            .height(if (matchMode == MatchMode.DOUBLES) 40.dp else 28.dp)
             .clip(CircleShape)
             .background(AppColors.surface)
-            .semantics { contentDescription = "Serving: ${server?.let(settings::displayName) ?: "Not selected"}" }
+            .semantics { contentDescription = text }
             .testTag("serverIndicator"),
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = "Serving: ${server?.let(settings::displayName) ?: "-"}",
+            text = text,
             color = AppColors.text,
-            fontSize = 13.sp,
+            fontSize = if (matchMode == MatchMode.DOUBLES) 10.sp else 13.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
         )
@@ -1315,6 +1649,7 @@ private fun ServerIndicator(
 private fun ScoreBoard(
     set: SetScore,
     server: Player?,
+    matchMode: MatchMode,
     settings: AppSettings,
 ) {
     Row(
@@ -1323,8 +1658,8 @@ private fun ScoreBoard(
             .height(60.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ScoreColumn(Player.UWE, set.uwePoints, server == Player.UWE, settings, Modifier.weight(1f))
-        ScoreColumn(Player.OPPONENT, set.opponentPoints, server == Player.OPPONENT, settings, Modifier.weight(1f))
+        ScoreColumn(Player.UWE, set.uwePoints, server == Player.UWE, settings, matchMode, Modifier.weight(1f))
+        ScoreColumn(Player.OPPONENT, set.opponentPoints, server == Player.OPPONENT, settings, matchMode, Modifier.weight(1f))
     }
 }
 
@@ -1334,10 +1669,11 @@ private fun ScoreColumn(
     points: Int,
     isServing: Boolean,
     settings: AppSettings,
+    matchMode: MatchMode,
     modifier: Modifier = Modifier,
 ) {
     val borderColor = if (isServing) AppColors.serve else AppColors.outline
-    val name = settings.displayName(player)
+    val name = if (matchMode == MatchMode.SINGLES) settings.displayName(player) else settings.phoneTeamLabel(player)
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -1353,8 +1689,8 @@ private fun ScoreColumn(
         Text(
             text = name,
             color = AppColors.muted,
-            fontSize = 12.sp,
-            maxLines = 1,
+            fontSize = if (matchMode == MatchMode.SINGLES) 12.sp else 10.sp,
+            maxLines = if (matchMode == MatchMode.SINGLES) 1 else 2,
             textAlign = TextAlign.Center,
         )
         Text(
@@ -1661,12 +1997,17 @@ private fun rememberEndEffect(
 }
 
 private fun shortName(player: Player, settings: AppSettings): String {
-    val fullName = settings.displayName(player)
+    val fullName = settings.pointButtonLabel(player)
     return if (player == Player.OPPONENT && fullName.length > 5) {
         fullName.take(5)
     } else {
         fullName
     }
+}
+
+private fun doublesSeatsForTeam(team: Player): List<DoublesSeat> = when (team) {
+    Player.UWE -> listOf(DoublesSeat.HOME_1, DoublesSeat.HOME_2)
+    Player.OPPONENT -> listOf(DoublesSeat.AWAY_1, DoublesSeat.AWAY_2)
 }
 
 private fun currentSetTimeline(state: MatchState): List<ChartPoint> {
@@ -1722,7 +2063,10 @@ private fun MatchState.isPristine(): Boolean =
         sets.size == 1 &&
         currentSet.uwePoints == 0 &&
         currentSet.opponentPoints == 0 &&
-        currentSet.firstServer == null
+        currentSet.firstServer == null &&
+        currentSet.doublesFirstServer == null &&
+        currentSet.doublesFirstReceiver == null &&
+        currentSet.doublesReceiverSwapTeam == null
 
 @Preview(device = WearDevices.SMALL_ROUND, showSystemUi = true)
 @Preview(device = WearDevices.LARGE_ROUND, showSystemUi = true)

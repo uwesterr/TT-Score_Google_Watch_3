@@ -188,4 +188,64 @@ class MatchLogicTest {
     fun soundsDefaultToEnabled() {
         assertTrue(AppSettings().soundsEnabled)
     }
+
+    @Test
+    fun doublesServeCycleFollowsIttfOrder() {
+        var state = MatchRules.newMatch(AppSettings(matchMode = MatchMode.DOUBLES))
+        state = MatchRules.chooseDoublesOpening(state, DoublesSeat.HOME_1, DoublesSeat.AWAY_1)
+
+        assertEquals(DoublesSeat.HOME_1, MatchRules.currentDoublesServer(state.currentSet))
+        assertEquals(DoublesSeat.AWAY_1, MatchRules.currentDoublesReceiver(state.currentSet))
+
+        repeat(2) { state = MatchRules.addPoint(state, Player.UWE) }
+        assertEquals(DoublesSeat.AWAY_1, MatchRules.currentDoublesServer(state.currentSet))
+        assertEquals(DoublesSeat.HOME_2, MatchRules.currentDoublesReceiver(state.currentSet))
+
+        repeat(2) { state = MatchRules.addPoint(state, Player.OPPONENT) }
+        assertEquals(DoublesSeat.HOME_2, MatchRules.currentDoublesServer(state.currentSet))
+        assertEquals(DoublesSeat.AWAY_2, MatchRules.currentDoublesReceiver(state.currentSet))
+
+        repeat(2) { state = MatchRules.addPoint(state, Player.UWE) }
+        assertEquals(DoublesSeat.AWAY_2, MatchRules.currentDoublesServer(state.currentSet))
+        assertEquals(DoublesSeat.HOME_1, MatchRules.currentDoublesReceiver(state.currentSet))
+    }
+
+    @Test
+    fun doublesNextSetServingTeamAlternatesAndFirstReceiverIsDerived() {
+        var state = MatchRules.newMatch(AppSettings(matchMode = MatchMode.DOUBLES))
+        state = MatchRules.chooseDoublesOpening(state, DoublesSeat.HOME_1, DoublesSeat.AWAY_1)
+        repeat(11) { state = MatchRules.addPoint(state, Player.UWE) }
+
+        state = MatchRules.startNextSet(state)
+
+        assertEquals(Player.OPPONENT, MatchRules.entitledServingTeam(state))
+        assertEquals(
+            DoublesSeat.HOME_1,
+            MatchRules.derivedFirstReceiverForCurrentSet(state, DoublesSeat.AWAY_2),
+        )
+        assertEquals(
+            DoublesSeat.HOME_2,
+            MatchRules.derivedFirstReceiverForCurrentSet(state, DoublesSeat.AWAY_1),
+        )
+    }
+
+    @Test
+    fun doublesDecidingSetSwapsReceivingOrderAtFive() {
+        var state = MatchState(
+            sets = listOf(
+                SetScore(11, 8, doublesFirstServer = DoublesSeat.HOME_1, doublesFirstReceiver = DoublesSeat.AWAY_1),
+                SetScore(8, 11, doublesFirstServer = DoublesSeat.AWAY_1, doublesFirstReceiver = DoublesSeat.HOME_2),
+                SetScore(4, 3, doublesFirstServer = DoublesSeat.HOME_1, doublesFirstReceiver = DoublesSeat.AWAY_1),
+            ),
+            currentSetIndex = 2,
+            setsToWinMatch = MatchFormat.BEST_OF_THREE.setsToWinMatch,
+            matchMode = MatchMode.DOUBLES,
+        )
+
+        state = MatchRules.addPoint(state, Player.UWE)
+
+        assertEquals(Player.OPPONENT, state.currentSet.doublesReceiverSwapTeam)
+        assertEquals(DoublesSeat.HOME_1, MatchRules.currentDoublesServer(state.currentSet))
+        assertEquals(DoublesSeat.AWAY_2, MatchRules.currentDoublesReceiver(state.currentSet))
+    }
 }
