@@ -603,6 +603,8 @@ private fun DoublesServePromptScreen(
     onOpenSettings: () -> Unit,
 ) {
     val selectableServingTeam = servingTeam
+    val servingTeamLabel = selectableServingTeam?.let(settings::displayName).orEmpty()
+    val chosenServerLabel = chosenServer?.let(settings::seatName).orEmpty()
     val title = when (step) {
         DoublesPromptStep.CHOOSE_PAIR -> "Who serves first?"
         DoublesPromptStep.CHOOSE_SERVER -> "First server?"
@@ -612,12 +614,17 @@ private fun DoublesServePromptScreen(
         DoublesPromptStep.CHOOSE_PAIR -> "Choose the team that opens set $setNumber."
         DoublesPromptStep.CHOOSE_SERVER -> {
             if (setNumber == 1) {
-                "Choose the player who serves first."
+                "Choose the player on $servingTeamLabel who serves the first ball of set $setNumber."
             } else {
-                "Choose the player who serves first. ${derivedFirstReceiver?.let { "Receiver: ${settings.seatName(it)}." } ?: ""}".trim()
+                buildString {
+                    append("$servingTeamLabel receives first in this set, so choose who serves first.")
+                    derivedFirstReceiver?.let {
+                        append(" First receiver: ${settings.seatName(it)}.")
+                    }
+                }
             }
         }
-        DoublesPromptStep.CHOOSE_RECEIVER -> "Choose the first receiver."
+        DoublesPromptStep.CHOOSE_RECEIVER -> "Choose who receives the first serve from $chosenServerLabel."
     }
 
     Column(
@@ -666,6 +673,21 @@ private fun DoublesServePromptScreen(
             modifier = Modifier.padding(horizontal = 6.dp),
         )
         Spacer(modifier = Modifier.height(12.dp))
+        when (step) {
+            DoublesPromptStep.CHOOSE_SERVER -> {
+                selectableServingTeam?.let {
+                    StatusPill(text = "Serving team: ${settings.displayName(it)}")
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+            }
+            DoublesPromptStep.CHOOSE_RECEIVER -> {
+                chosenServer?.let {
+                    StatusPill(text = "Opening server: ${settings.seatName(it)}")
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+            }
+            DoublesPromptStep.CHOOSE_PAIR -> Unit
+        }
         when (step) {
             DoublesPromptStep.CHOOSE_PAIR -> {
                 Row(

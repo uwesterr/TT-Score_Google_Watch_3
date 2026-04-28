@@ -257,6 +257,9 @@ object MatchRules {
         if (newState.currentSet.winner != null || newState.matchWinner != null) return null
 
         return when {
+            shouldSwapDoublesReceivers(previousState, newState) ->
+                MatchCue(MatchCueKind.CHANGE_ENDS, "Change ends + swap receivers")
+
             shouldChangeEnds(previousState, newState) ->
                 MatchCue(MatchCueKind.CHANGE_ENDS, "Change ends")
 
@@ -293,6 +296,13 @@ object MatchRules {
         if (previousState.currentSetIndex != newState.currentSetIndex) return false
         return newState.currentSet.uwePoints == CHANGE_ENDS_POINTS ||
             newState.currentSet.opponentPoints == CHANGE_ENDS_POINTS
+    }
+
+    fun shouldSwapDoublesReceivers(previousState: MatchState, newState: MatchState): Boolean {
+        if (newState.matchMode != MatchMode.DOUBLES) return false
+        if (!shouldChangeEnds(previousState, newState)) return false
+        return previousState.currentSet.doublesReceiverSwapTeam == null &&
+            newState.currentSet.doublesReceiverSwapTeam != null
     }
 
     private fun isSetPoint(set: SetScore, player: Player): Boolean {

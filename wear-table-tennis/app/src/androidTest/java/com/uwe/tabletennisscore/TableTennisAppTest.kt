@@ -202,6 +202,45 @@ class TableTennisAppTest {
         composeTestRule.onNodeWithTag("doublesServerH1").performClick()
         composeTestRule.onNodeWithTag("doublesReceiverA1").performClick()
 
-        composeTestRule.onNodeWithText("Serve Me -> Opponent").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Server: Me\nReceiver: Opponent").assertIsDisplayed()
+    }
+
+    @Test
+    fun switchingSinglesMatchToDoublesStartsFreshMatch() {
+        composeTestRule.onNodeWithTag("serveUwe").performClick()
+        composeTestRule.onNodeWithTag("pointUwe").performClick()
+
+        composeTestRule.onNodeWithTag("openSettings").performClick()
+        composeTestRule.onNodeWithTag("modeDoubles").performClick()
+        composeTestRule.onNodeWithTag("settingsScreen").performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithTag("saveSettings").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("doublesServePrompt").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Who serves first?").assertIsDisplayed()
+        composeTestRule.onAllNodesWithTag("servePrompt").assertCountEquals(0)
+    }
+
+    @Test
+    fun switchingDoublesMatchBackToSinglesStartsFreshMatch() {
+        composeTestRule.onNodeWithTag("openSettingsFromPrompt").performClick()
+        composeTestRule.onNodeWithTag("modeDoubles").performClick()
+        composeTestRule.onNodeWithTag("settingsScreen").performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithTag("saveSettings").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("serveUwe").performClick()
+        composeTestRule.onNodeWithTag("doublesServerH1").performClick()
+        composeTestRule.onNodeWithTag("doublesReceiverA1").performClick()
+        composeTestRule.onNodeWithTag("pointUwe").performClick()
+
+        composeTestRule.onNodeWithTag("openSettings").performClick()
+        composeTestRule.onNodeWithTag("modeSingles").performClick()
+        composeTestRule.onNodeWithTag("settingsScreen").performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithTag("saveSettings").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("servePrompt").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Serve first?").assertIsDisplayed()
     }
 }

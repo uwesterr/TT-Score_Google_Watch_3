@@ -23,9 +23,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -87,6 +91,11 @@ class MainActivity : ComponentActivity() {
 private enum class PhoneScreen {
     SCOREBOARD,
     SETTINGS,
+}
+
+private enum class PhoneDisplayMode {
+    STANDARD,
+    SCOREBOARD,
 }
 
 private enum class PhoneMatchMode {
@@ -357,6 +366,7 @@ private fun CompanionPhoneApp() {
     val soundPlayer = remember(context) { PhoneEndSoundPlayer(context.applicationContext) }
     val speechPlayer = remember(context) { PhoneSpeechPlayer(context.applicationContext) }
     var screen by rememberSaveable { mutableStateOf(PhoneScreen.SCOREBOARD) }
+    var displayMode by rememberSaveable { mutableStateOf(PhoneDisplayMode.STANDARD) }
     var phoneSettings by remember { mutableStateOf(settingsStore.load()) }
     var consumedEffectToken by rememberSaveable { mutableStateOf("") }
     var consumedSpeechKey by rememberSaveable { mutableStateOf("") }
@@ -433,6 +443,13 @@ private fun CompanionPhoneApp() {
                         CompanionScoreScreen(
                             snapshot = snapshot,
                             endEffect = endEffect,
+                            displayMode = displayMode,
+                            onToggleDisplayMode = {
+                                displayMode = when (displayMode) {
+                                    PhoneDisplayMode.STANDARD -> PhoneDisplayMode.SCOREBOARD
+                                    PhoneDisplayMode.SCOREBOARD -> PhoneDisplayMode.STANDARD
+                                }
+                            },
                             onOpenSettings = { screen = PhoneScreen.SETTINGS },
                         )
                     } else {
@@ -496,6 +513,8 @@ private fun EmptyCompanionScreen(
 private fun CompanionScoreScreen(
     snapshot: CompanionScoreSnapshot,
     endEffect: PhoneEndEffect?,
+    displayMode: PhoneDisplayMode,
+    onToggleDisplayMode: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val configuration = LocalConfiguration.current
@@ -509,21 +528,41 @@ private fun CompanionScoreScreen(
             .background(Brush.verticalGradient(listOf(Color(0xFF05070A), Color(0xFF101820)))),
     ) {
         if (isLandscape) {
-            LandscapeCompanionScoreLayout(
-                snapshot = snapshot,
-                serverName = serverName,
-                receiverName = receiverName,
-                setScore = setScore,
-                onOpenSettings = onOpenSettings,
-            )
+            when (displayMode) {
+                PhoneDisplayMode.STANDARD -> LandscapeCompanionScoreLayout(
+                    snapshot = snapshot,
+                    serverName = serverName,
+                    receiverName = receiverName,
+                    setScore = setScore,
+                    onToggleDisplayMode = onToggleDisplayMode,
+                    onOpenSettings = onOpenSettings,
+                )
+                PhoneDisplayMode.SCOREBOARD -> LandscapeScoreboardModeLayout(
+                    snapshot = snapshot,
+                    serverName = serverName,
+                    receiverName = receiverName,
+                    setScore = setScore,
+                    onExitScoreboardMode = onToggleDisplayMode,
+                )
+            }
         } else {
-            PortraitCompanionScoreLayout(
-                snapshot = snapshot,
-                serverName = serverName,
-                receiverName = receiverName,
-                setScore = setScore,
-                onOpenSettings = onOpenSettings,
-            )
+            when (displayMode) {
+                PhoneDisplayMode.STANDARD -> PortraitCompanionScoreLayout(
+                    snapshot = snapshot,
+                    serverName = serverName,
+                    receiverName = receiverName,
+                    setScore = setScore,
+                    onToggleDisplayMode = onToggleDisplayMode,
+                    onOpenSettings = onOpenSettings,
+                )
+                PhoneDisplayMode.SCOREBOARD -> PortraitScoreboardModeLayout(
+                    snapshot = snapshot,
+                    serverName = serverName,
+                    receiverName = receiverName,
+                    setScore = setScore,
+                    onExitScoreboardMode = onToggleDisplayMode,
+                )
+            }
         }
 
         if (endEffect?.type == PhoneEndEffectType.HAPPY_SET || endEffect?.type == PhoneEndEffectType.HAPPY_MATCH) {
@@ -541,6 +580,7 @@ private fun PortraitCompanionScoreLayout(
     serverName: String,
     receiverName: String,
     setScore: String,
+    onToggleDisplayMode: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     Column(
@@ -549,7 +589,10 @@ private fun PortraitCompanionScoreLayout(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        HeaderRow(onOpenSettings = onOpenSettings)
+        HeaderRow(
+            onOpenSettings = onOpenSettings,
+            onToggleDisplayMode = onToggleDisplayMode,
+        )
 
         if (snapshot.isSetComplete || snapshot.isMatchComplete) {
             ResultCard(snapshot = snapshot, setScore = setScore)
@@ -602,6 +645,7 @@ private fun LandscapeCompanionScoreLayout(
     serverName: String,
     receiverName: String,
     setScore: String,
+    onToggleDisplayMode: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     Row(
@@ -621,7 +665,11 @@ private fun LandscapeCompanionScoreLayout(
                     .padding(horizontal = 20.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                HeaderRow(onOpenSettings = onOpenSettings, compact = true)
+                HeaderRow(
+                    onOpenSettings = onOpenSettings,
+                    onToggleDisplayMode = onToggleDisplayMode,
+                    compact = true,
+                )
                 Row(
                     modifier = Modifier.fillMaxSize(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -682,8 +730,128 @@ private fun LandscapeCompanionScoreLayout(
 }
 
 @Composable
+private fun PortraitScoreboardModeLayout(
+    snapshot: CompanionScoreSnapshot,
+    serverName: String,
+    receiverName: String,
+    setScore: String,
+    onExitScoreboardMode: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        ScoreboardModeHeader(onExitScoreboardMode = onExitScoreboardMode)
+        ServingCard(
+            serverName = serverName,
+            receiverName = if (snapshot.matchMode == PhoneMatchMode.DOUBLES) receiverName else null,
+        )
+        SetScoreCard(setScore = setScore)
+        LargeStatusCard(
+            status = snapshot.matchStatus,
+            currentSetNumber = snapshot.currentSetNumber,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            ScoreTile(
+                label = snapshot.meName.teamLabel(snapshot.matchMode),
+                value = snapshot.mePoints.toString(),
+                accent = Color(0xFFD9F99D),
+                isServing = snapshot.currentServerTeamCode == "U",
+                roleText = snapshot.roleTextForTeam("U"),
+            )
+            ScoreTile(
+                label = snapshot.opponentName.teamLabel(snapshot.matchMode),
+                value = snapshot.opponentPoints.toString(),
+                accent = Color(0xFF93C5FD),
+                isServing = snapshot.currentServerTeamCode == "O",
+                roleText = snapshot.roleTextForTeam("O"),
+            )
+        }
+    }
+}
+
+@Composable
+private fun LandscapeScoreboardModeLayout(
+    snapshot: CompanionScoreSnapshot,
+    serverName: String,
+    receiverName: String,
+    setScore: String,
+    onExitScoreboardMode: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(2.2f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            ScoreboardModeHeader(
+                onExitScoreboardMode = onExitScoreboardMode,
+                compact = true,
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                ScoreboardLandscapeScoreTile(
+                    label = snapshot.meName.teamLabel(snapshot.matchMode),
+                    value = snapshot.mePoints.toString(),
+                    accent = Color(0xFFD9F99D),
+                    isServing = snapshot.currentServerTeamCode == "U",
+                    roleText = snapshot.roleTextForTeam("U"),
+                )
+                ScoreboardLandscapeScoreTile(
+                    label = snapshot.opponentName.teamLabel(snapshot.matchMode),
+                    value = snapshot.opponentPoints.toString(),
+                    accent = Color(0xFF93C5FD),
+                    isServing = snapshot.currentServerTeamCode == "O",
+                    roleText = snapshot.roleTextForTeam("O"),
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            ServingCard(
+                serverName = serverName,
+                receiverName = if (snapshot.matchMode == PhoneMatchMode.DOUBLES) receiverName else null,
+                compact = true,
+            )
+            SetScoreCard(setScore = setScore, compact = true)
+            LargeStatusCard(
+                status = snapshot.matchStatus,
+                currentSetNumber = snapshot.currentSetNumber,
+                compact = true,
+            )
+            if (snapshot.isSetComplete || snapshot.isMatchComplete) {
+                ResultCard(snapshot = snapshot, setScore = setScore)
+            } else {
+                Spacer(modifier = Modifier.size(1.dp))
+            }
+        }
+    }
+}
+
+@Composable
 private fun HeaderRow(
     onOpenSettings: () -> Unit,
+    onToggleDisplayMode: () -> Unit,
     compact: Boolean = false,
 ) {
     Row(
@@ -697,10 +865,43 @@ private fun HeaderRow(
             fontSize = if (compact) 24.sp else 34.sp,
             fontWeight = FontWeight.Bold,
         )
-        OutlinedButton(onClick = onOpenSettings) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(onClick = onToggleDisplayMode) {
+                Text(
+                    text = "Board",
+                    fontSize = if (compact) 14.sp else 16.sp,
+                )
+            }
+            OutlinedButton(onClick = onOpenSettings) {
+                Text(
+                    text = "Settings",
+                    fontSize = if (compact) 14.sp else 16.sp,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScoreboardModeHeader(
+    onExitScoreboardMode: () -> Unit,
+    compact: Boolean = false,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Scoreboard",
+            color = Color.White,
+            fontSize = if (compact) 20.sp else 24.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        OutlinedButton(onClick = onExitScoreboardMode) {
             Text(
-                text = "Settings",
-                fontSize = if (compact) 14.sp else 16.sp,
+                text = "Normal",
+                fontSize = if (compact) 13.sp else 15.sp,
             )
         }
     }
@@ -931,6 +1132,37 @@ private fun SetScoreCard(
                 color = Color.White,
                 fontSize = if (compact) 26.sp else 30.sp,
                 fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LargeStatusCard(
+    status: String,
+    currentSetNumber: Int,
+    compact: Boolean = false,
+) {
+    Card(shape = RoundedCornerShape(24.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF18212B))
+                .padding(
+                    horizontal = if (compact) 18.dp else 20.dp,
+                    vertical = if (compact) 16.dp else 18.dp,
+                ),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 12.dp),
+        ) {
+            DetailRow(
+                label = "Current set",
+                value = currentSetNumber.toString(),
+                compact = compact,
+            )
+            DetailRow(
+                label = "Status",
+                value = status,
+                compact = compact,
             )
         }
     }
@@ -1361,6 +1593,71 @@ private fun RowScope.LandscapeScoreTile(
             fontSize = 136.sp,
             fontWeight = FontWeight.Bold,
             lineHeight = 136.sp,
+        )
+    }
+}
+
+@Composable
+private fun RowScope.ScoreboardLandscapeScoreTile(
+    label: String,
+    value: String,
+    accent: Color,
+    isServing: Boolean,
+    roleText: String?,
+) {
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            .background(Color(0xFF101820), RoundedCornerShape(28.dp))
+            .border(
+                width = if (isServing) 5.dp else 2.dp,
+                color = if (isServing) accent else Color(0xFF223041),
+                shape = RoundedCornerShape(28.dp),
+            )
+            .padding(horizontal = 16.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = label,
+                color = Color(0xFFD1D5DB),
+                fontSize = if ('\n' in label) 20.sp else 24.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                maxLines = if ('\n' in label) 2 else 1,
+            )
+            when {
+                roleText != null -> {
+                    Text(
+                        text = roleText,
+                        color = accent,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                    )
+                }
+                isServing -> {
+                    Text(
+                        text = "SERVING",
+                        color = accent,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+        Text(
+            text = value,
+            color = accent,
+            fontSize = 170.sp,
+            fontWeight = FontWeight.Bold,
+            lineHeight = 170.sp,
         )
     }
 }

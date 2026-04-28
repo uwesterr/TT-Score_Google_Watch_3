@@ -248,4 +248,48 @@ class MatchLogicTest {
         assertEquals(DoublesSeat.HOME_1, MatchRules.currentDoublesServer(state.currentSet))
         assertEquals(DoublesSeat.AWAY_2, MatchRules.currentDoublesReceiver(state.currentSet))
     }
+
+    @Test
+    fun doublesDecidingSetShowsExplicitSwapCueAtFive() {
+        val settings = AppSettings(matchMode = MatchMode.DOUBLES)
+        val previous = MatchState(
+            sets = listOf(
+                SetScore(11, 8, doublesFirstServer = DoublesSeat.HOME_1, doublesFirstReceiver = DoublesSeat.AWAY_1),
+                SetScore(8, 11, doublesFirstServer = DoublesSeat.AWAY_1, doublesFirstReceiver = DoublesSeat.HOME_2),
+                SetScore(4, 3, doublesFirstServer = DoublesSeat.HOME_1, doublesFirstReceiver = DoublesSeat.AWAY_1),
+            ),
+            currentSetIndex = 2,
+            setsToWinMatch = MatchFormat.BEST_OF_THREE.setsToWinMatch,
+            matchMode = MatchMode.DOUBLES,
+        )
+        val next = MatchRules.addPoint(previous, Player.UWE)
+
+        val cue = MatchRules.cueForTransition(previous, next, settings)
+
+        assertEquals(MatchCueKind.CHANGE_ENDS, cue?.kind)
+        assertEquals("Change ends + swap receivers", cue?.text)
+    }
+
+    @Test
+    fun undoRestoresDoublesReceiverSwapState() {
+        var state = MatchState(
+            sets = listOf(
+                SetScore(11, 8, doublesFirstServer = DoublesSeat.HOME_1, doublesFirstReceiver = DoublesSeat.AWAY_1),
+                SetScore(8, 11, doublesFirstServer = DoublesSeat.AWAY_1, doublesFirstReceiver = DoublesSeat.HOME_2),
+                SetScore(4, 3, doublesFirstServer = DoublesSeat.HOME_1, doublesFirstReceiver = DoublesSeat.AWAY_1),
+            ),
+            currentSetIndex = 2,
+            setsToWinMatch = MatchFormat.BEST_OF_THREE.setsToWinMatch,
+            matchMode = MatchMode.DOUBLES,
+        )
+
+        state = MatchRules.addPoint(state, Player.UWE)
+        state = MatchRules.undoLastPoint(state)
+
+        assertNull(state.currentSet.doublesReceiverSwapTeam)
+        assertEquals(DoublesSeat.AWAY_2, MatchRules.currentDoublesServer(state.currentSet))
+        assertEquals(DoublesSeat.HOME_1, MatchRules.currentDoublesReceiver(state.currentSet))
+        assertEquals(4, state.currentSet.uwePoints)
+        assertEquals(3, state.currentSet.opponentPoints)
+    }
 }
