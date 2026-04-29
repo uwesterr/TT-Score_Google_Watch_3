@@ -1,6 +1,7 @@
 # TT Score Pro
 
 TT Score Pro is a **standalone Wear OS table-tennis scoring app** with an optional **Android phone companion** that mirrors the live match.
+Singles is the default mode. Doubles is available with rule-aware serving and receiving order.
 
 The project was written with **Codex**.
 
@@ -8,72 +9,96 @@ The project was written with **Codex**.
 
 ### Watch
 
-<img src="wear-table-tennis/docs/emulator-screenshot.png" alt="TT Score Wear OS Emulator Screenshot" width="32%">
-<img src="wear-table-tennis/docs/emulator-screenshot-nine-nine.png" alt="TT Score Wear OS Emulator Screenshot (9-9 Comeback State)" width="32%">
-<img src="wear-table-tennis/docs/emulator-screenshot-settings.png" alt="TT Score Wear OS Emulator Screenshot (Settings)" width="32%">
+<img src="wear-table-tennis/docs/readme-watch-serve-first.png" alt="TT Score Pro watch first-server prompt" width="32%">
+<img src="wear-table-tennis/docs/emulator-screenshot-nine-nine.png" alt="TT Score Pro watch live match screen" width="32%">
+<img src="wear-table-tennis/docs/readme-watch-settings.png" alt="TT Score Pro watch settings" width="32%">
 
 ### Phone Companion
 
-<img src="wear-table-tennis/docs/phone-landscape-screenshot.png" alt="TT Score Pro Phone Companion Landscape Screenshot" width="65%">
+<img src="wear-table-tennis/docs/readme-phone-standard.png" alt="TT Score Pro phone standard companion screen" width="48%">
+<img src="wear-table-tennis/docs/readme-phone-doubles.png" alt="TT Score Pro phone doubles companion screen" width="48%">
 
-## What The App Does
+## Current UI
 
 ### Watch app
 
-- Standalone scoring app for real table-tennis matches
-- Best of 3 by default, with optional best of 5
-- Sets to 11, win by 2
-- Service changes every 2 points before deuce, then every point from `10-10`
-- Asks who serves first in set 1
-- Later sets automatically alternate the starting server
-- Large touch-first controls:
+- Standalone scoring on the watch for real matches
+- `Singles` default, `Doubles` optional
+- `Best of 3` default, optional `Best of 5`
+- Large touch controls for:
   - `+ Me`
   - `+ Opp`
   - `Undo`
   - `New`
-- Live display of:
-  - current score
-  - current server
+- Live match display shows:
+  - score
   - set score
-- Dedicated settings screen with:
-  - editable player names
+  - current server in singles
+  - `Server` and `Receiver` in doubles
+- Doubles opening flow on the watch:
+  - who serves first
+  - first server
+  - first receiver
+- Watch settings include:
+  - match mode
+  - all player names
   - speech input for names
-  - best-of-3 / best-of-5
-  - haptics on/off
-  - sounds on/off
-  - display always on on/off
-- Rule-aware cue banners for:
+  - match format
+  - haptics
+  - sounds
+  - always-on display
+  - privacy policy
+- In-match cues include:
   - serve change
   - deuce
   - set point
   - match point
-  - change ends
-- Swipeable point-history charts:
-  - during a set
-  - after a set
-  - after a match
-- Win/loss sound cues and celebration effects
+  - end change
+  - deciding-set doubles receiver swap at `5`
+- Swipeable point-history charts are available during and after sets
 
 ### Phone companion app
 
-- Read-only companion display for the live match
-- Big scoreboard layout with a landscape mode tuned for distance readability
-- Shows:
-  - current score
-  - current server
+- Read-only live companion for the watch match
+- `Standard` view and dedicated `Scoreboard` view
+- Landscape scoreboard is tuned for distance readability
+- Phone display shows:
+  - score
   - set score
   - current set
   - match status
-- End-of-set and end-of-match result cards
-- Phone-side sounds and celebration animation
-- Phone-side speech output in **German**
-  - after each ball, the phone says the score
-  - the score order follows the player who serves next
-  - when the serve changes, the phone says who serves next
-  - after each set and each match, the phone announces the winner and the set standing
-- Phone `Sounds` setting is the master switch for all phone audio:
-  - jingles
-  - speech
+  - current server in singles
+  - `Server` and `Receiver` in doubles
+- End-of-set and end-of-match cards
+- Optional phone speech announcements in `German` or `English`
+- Separate phone settings for:
+  - `Jingles`
+  - `Speech`
+  - `Language`
+  - privacy policy
+
+## Serving Rules
+
+### Singles
+
+- Choose the first server in set 1.
+- Service changes every `2` points.
+- From `10-10`, service changes every point.
+- The opening server alternates from set to set.
+
+### Doubles
+
+- At the start of each set, choose:
+  - which pair serves first
+  - the first server
+  - the first receiver
+- Service changes every `2` points, then every point from `10-10`.
+- On each service change:
+  - the previous receiver becomes the next server
+  - the partner of the previous server becomes the next receiver
+- In the deciding set, when one side first reaches `5`:
+  - ends change
+  - the pair due to receive next swaps receiver order
 
 ## Devices And Requirements
 
@@ -98,6 +123,15 @@ The project was written with **Codex**.
 
 - `wear-table-tennis/app` = Wear OS watch app
 - `wear-table-tennis/phone` = Android phone companion app
+
+## Play Store Packaging
+
+- Both apps share the Play package name `com.uwe.tabletennisscore`.
+- The phone companion and the watch app are published under **one Play listing**, but on **separate release tracks**:
+  - `phone-release.aab` for the normal Android track
+  - `app-release.aab` for the dedicated **Wear OS** track
+- The watch app is the primary standalone product.
+- The phone app remains optional and acts as a companion scoreboard.
 
 ## Android Studio Workflow Notes
 
