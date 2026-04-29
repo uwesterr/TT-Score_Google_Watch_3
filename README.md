@@ -9,14 +9,18 @@ The project was written with **Codex**.
 
 ### Watch
 
-<img src="wear-table-tennis/docs/readme-watch-serve-first.png" alt="TT Score Pro watch first-server prompt" width="32%">
-<img src="wear-table-tennis/docs/emulator-screenshot-nine-nine.png" alt="TT Score Pro watch live match screen" width="32%">
-<img src="wear-table-tennis/docs/readme-watch-settings.png" alt="TT Score Pro watch settings" width="32%">
+<p>
+  <img src="wear-table-tennis/docs/readme-watch-serve-first.png" alt="TT Score Pro watch first-server prompt" width="32%">
+  <img src="wear-table-tennis/docs/emulator-screenshot-nine-nine.png" alt="TT Score Pro watch live match screen" width="32%">
+  <img src="wear-table-tennis/docs/readme-watch-settings.png" alt="TT Score Pro watch settings" width="32%">
+</p>
 
 ### Phone Companion
 
-<img src="wear-table-tennis/docs/readme-phone-standard.png" alt="TT Score Pro phone standard companion screen" width="48%">
-<img src="wear-table-tennis/docs/readme-phone-doubles.png" alt="TT Score Pro phone doubles companion screen" width="48%">
+<p>
+  <img src="wear-table-tennis/docs/readme-phone-standard.png" alt="TT Score Pro phone standard companion screen" width="48%">
+  <img src="wear-table-tennis/docs/readme-phone-doubles.png" alt="TT Score Pro phone doubles companion screen" width="48%">
+</p>
 
 ## Current UI
 
