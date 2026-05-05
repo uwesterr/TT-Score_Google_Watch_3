@@ -5,6 +5,20 @@ Singles is the default mode. Doubles is available with rule-aware serving and re
 
 The project was written with **Codex**.
 
+## Table Of Contents
+
+- [Screenshots](#screenshots)
+- [Current UI](#current-ui)
+- [Handling The Watch During A Match](#handling-the-watch-during-a-match)
+- [Serving Rules](#serving-rules)
+- [Devices And Requirements](#devices-and-requirements)
+- [Project Structure](#project-structure)
+- [Play Store Packaging](#play-store-packaging)
+- [Android Studio Workflow Notes](#android-studio-workflow-notes)
+- [Install And Run](#install-and-run)
+- [Manual Smoke Test](#manual-smoke-test)
+- [Build And Test](#build-and-test)
+
 ## Screenshots
 
 ### Watch
@@ -29,11 +43,8 @@ The project was written with **Codex**.
 - Standalone scoring on the watch for real matches
 - `Singles` default, `Doubles` optional
 - `Best of 3` default, optional `Best of 5`
-- Large touch controls for:
-  - `+ Me`
-  - `+ Opp`
-  - `Undo`
-  - `New`
+- Large score panels double as touch targets for adding points
+- Top controls expose set score, `Set`, `Undo`, and `New`
 - Live match display shows:
   - score
   - set score
@@ -83,6 +94,36 @@ The project was written with **Codex**.
   - `Speech`
   - `Language`
   - privacy policy
+
+## Handling The Watch During A Match
+
+### Touch scoring
+
+1. Choose the first server when a new match or set asks for it.
+2. Tap the left score panel to add a point for `Me` / Home.
+3. Tap the right score panel to add a point for `Opponent` / Away.
+4. Use `Undo` at the top to remove the last point.
+5. Use `New` to start over.
+6. Tap `Set` to open settings between points.
+7. Swipe left from the score screen to view the point-history chart.
+
+The highlighted border shows the current server. In doubles, each team panel also names the current server or receiver when that team is involved in the next point.
+
+### Hardware scoring
+
+Turn on `Hardware scoring` in watch settings when you want to score without aiming at the touchscreen.
+
+- Watches with two detected side buttons:
+  - first side button scores `Me` / Home
+  - second side button scores `Opponent` / Away
+- Watches with one detected side button:
+  - single press scores `Me` / Home
+  - double press scores `Opponent` / Away
+- Watches without detected side buttons:
+  - rotate the crown backward for `Me` / Home
+  - rotate the crown forward for `Opponent` / Away
+
+Hardware scoring is active only on the live score screen. Settings, serve prompts, completed-set screens, `Undo`, and `New` remain touch-driven so accidental hardware input does not change setup or finished results.
 
 ## Serving Rules
 

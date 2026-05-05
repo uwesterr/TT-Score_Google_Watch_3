@@ -1606,7 +1606,7 @@ private fun SettingsToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(52.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(backgroundColor)
             .border(1.dp, borderColor, RoundedCornerShape(8.dp))
@@ -1630,9 +1630,10 @@ private fun SettingsToggleRow(
             Text(
                 text = label,
                 color = AppColors.text,
-                fontSize = 13.sp,
+                fontSize = 12.sp,
+                lineHeight = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
+                maxLines = 2,
                 modifier = Modifier.padding(start = 8.dp),
             )
         }
