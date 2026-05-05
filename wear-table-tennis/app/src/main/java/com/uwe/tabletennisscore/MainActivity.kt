@@ -7,7 +7,9 @@ import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Bundle
+import android.os.SystemClock
 import android.speech.RecognizerIntent
+import android.view.KeyEvent
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.animation.core.Animatable
@@ -21,6 +23,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +43,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
@@ -52,10 +56,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -71,8 +78,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
+import androidx.wear.input.WearableButtons
 import androidx.wear.tooling.preview.devices.WearDevices
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -82,17 +91,28 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class MainActivity : ComponentActivity() {
+    var hardwareScoreKeyHandler: ((Int) -> Boolean)? = null
+    var resetAppForTests: (() -> Unit)? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             TableTennisApp()
         }
     }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (event.repeatCount == 0 && hardwareScoreKeyHandler?.invoke(keyCode) == true) {
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
 }
 
 private enum class AppScreen {
     MATCH,
     SETTINGS,
+    PRIVACY,
 }
 
 private enum class SpeechTarget {
@@ -112,6 +132,7 @@ private data class SettingsDraft(
     val hapticsEnabled: Boolean,
     val soundsEnabled: Boolean,
     val keepScreenOn: Boolean,
+    val hardwareScoringEnabled: Boolean,
 ) {
     companion object {
         fun from(settings: AppSettings) = SettingsDraft(
@@ -124,6 +145,7 @@ private data class SettingsDraft(
             hapticsEnabled = settings.hapticsEnabled,
             soundsEnabled = settings.soundsEnabled,
             keepScreenOn = settings.keepScreenOn,
+            hardwareScoringEnabled = settings.hardwareScoringEnabled,
         )
     }
 
@@ -137,6 +159,7 @@ private data class SettingsDraft(
         hapticsEnabled = hapticsEnabled,
         soundsEnabled = soundsEnabled,
         keepScreenOn = keepScreenOn,
+        hardwareScoringEnabled = hardwareScoringEnabled,
     )
 }
 
@@ -156,6 +179,72 @@ private enum class DoublesPromptStep {
     CHOOSE_PAIR,
     CHOOSE_SERVER,
     CHOOSE_RECEIVER,
+}
+
+private data class HardwareScoringButton(
+    val keyCode: Int,
+    val label: String,
+)
+
+private data class HardwareScoringButtons(
+    val buttons: List<HardwareScoringButton>,
+) {
+    val description: String
+        get() = when (buttons.size) {
+            0 -> "On this watch: rotate the crown back for Me/Home, forward for Opponent/Away."
+            1 -> "On this watch: press ${buttons[0].label} once for Me/Home, twice for Opponent/Away."
+            else -> "On this watch: press ${buttons[0].label} for Me/Home and ${buttons[1].label} for Opponent/Away."
+        }
+
+    fun immediatePlayerFor(keyCode: Int): Player? {
+        if (buttons.size < 2) return null
+        return when (keyCode) {
+            buttons[0].keyCode -> Player.UWE
+            buttons[1].keyCode -> Player.OPPONENT
+            else -> null
+        }
+    }
+
+    fun isSingleButtonKey(keyCode: Int): Boolean =
+        buttons.size == 1 && buttons[0].keyCode == keyCode
+
+    val usesRotaryFallback: Boolean
+        get() = buttons.isEmpty()
+
+    companion object {
+        private val stemKeyCandidates = listOf(
+            KeyEvent.KEYCODE_STEM_1,
+            KeyEvent.KEYCODE_STEM_2,
+            KeyEvent.KEYCODE_STEM_3,
+        )
+
+        fun detect(context: Context): HardwareScoringButtons {
+            val detectedButtons = try {
+                stemKeyCandidates.mapIndexedNotNull { index, keyCode ->
+                    if (WearableButtons.getButtonInfo(context, keyCode) == null) {
+                        null
+                    } else {
+                        HardwareScoringButton(
+                            keyCode = keyCode,
+                            label = WearableButtons.getButtonLabel(context, keyCode)
+                                ?.toString()
+                                ?.trim()
+                                ?.ifBlank { null }
+                                ?: fallbackLabel(index),
+                        )
+                    }
+                }
+            } catch (_: IllegalStateException) {
+                emptyList()
+            }
+            return HardwareScoringButtons(detectedButtons)
+        }
+
+        private fun fallbackLabel(index: Int): String = when (index) {
+            0 -> "the side button"
+            else -> "button ${index + 1}"
+        }
+    }
 }
 
 private class EndSoundPlayer(context: Context) {
@@ -229,12 +318,15 @@ private class EndSoundPlayer(context: Context) {
 fun TableTennisApp() {
     val context = LocalContext.current
     val activity = context as? Activity
+    val mainActivity = activity as? MainActivity
     val settingsStore = remember(context) { AppSettingsStore(context.applicationContext) }
     val settings by settingsStore.settings.collectAsState(initial = AppSettings())
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val soundPlayer = remember(context) { EndSoundPlayer(context.applicationContext) }
     val scorePublisher = remember(context) { WatchScorePublisher(context.applicationContext) }
+    val hardwareScoringButtons = remember(context) { HardwareScoringButtons.detect(context) }
+    val rotaryFocusRequester = remember { FocusRequester() }
 
     var state by rememberSaveable(stateSaver = MatchStateSaver) { mutableStateOf(MatchRules.newMatch()) }
     var screen by rememberSaveable { mutableStateOf(AppScreen.MATCH) }
@@ -246,6 +338,9 @@ fun TableTennisApp() {
     var doublesPromptStep by rememberSaveable { mutableStateOf(DoublesPromptStep.CHOOSE_PAIR) }
     var doublesPromptServingTeamCode by rememberSaveable { mutableStateOf("") }
     var doublesPromptServerSeatCode by rememberSaveable { mutableStateOf("") }
+    var pendingSingleButtonScore by remember { mutableStateOf<Job?>(null) }
+    var rotaryScoreDelta by remember { mutableStateOf(0f) }
+    var lastRotaryScoreAtMillis by remember { mutableStateOf(0L) }
 
     val speechLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
@@ -312,6 +407,15 @@ fun TableTennisApp() {
         }
     }
 
+    DisposableEffect(mainActivity) {
+        onDispose {
+            pendingSingleButtonScore?.cancel()
+            pendingSingleButtonScore = null
+            mainActivity?.hardwareScoreKeyHandler = null
+            mainActivity?.resetAppForTests = null
+        }
+    }
+
     fun performHaptic(type: HapticFeedbackType) {
         if (settings.hapticsEnabled) {
             haptics.performHapticFeedback(type)
@@ -338,6 +442,18 @@ fun TableTennisApp() {
 
     fun newMatch() {
         newMatchWithSettings(settings)
+    }
+
+    fun resetForTests() {
+        val defaultSettings = AppSettings()
+        state = MatchRules.newMatch(defaultSettings)
+        screen = AppScreen.MATCH
+        settingsDraft = SettingsDraft.from(defaultSettings)
+        activeCue = null
+        consumedEndEffectToken = ""
+        pendingSingleButtonScore?.cancel()
+        pendingSingleButtonScore = null
+        resetDoublesPrompt(setIndex = 0)
     }
 
     fun launchSpeechInput(target: SpeechTarget) {
@@ -376,10 +492,104 @@ fun TableTennisApp() {
         cue?.let { performHaptic(it.hapticType()) }
     }
 
+    fun isLiveScoreScreen(): Boolean =
+        screen == AppScreen.MATCH &&
+            state.currentSet.isReady(state.matchMode) &&
+            state.currentSet.winner == null &&
+            state.matchWinner == null
+
+    LaunchedEffect(settings.hardwareScoringEnabled, screen, state.currentSetIndex, state.currentSet.winner, state.matchWinner) {
+        if (settings.hardwareScoringEnabled && hardwareScoringButtons.usesRotaryFallback && isLiveScoreScreen()) {
+            rotaryFocusRequester.requestFocus()
+        }
+    }
+
+    fun handleHardwareScoreKey(keyCode: Int): Boolean {
+        if (!settings.hardwareScoringEnabled || !isLiveScoreScreen()) return false
+
+        hardwareScoringButtons.immediatePlayerFor(keyCode)?.let { player ->
+            pendingSingleButtonScore?.cancel()
+            pendingSingleButtonScore = null
+            onPoint(player)
+            return true
+        }
+
+        if (!hardwareScoringButtons.isSingleButtonKey(keyCode)) return false
+
+        val pending = pendingSingleButtonScore
+        if (pending?.isActive == true) {
+            pending.cancel()
+            pendingSingleButtonScore = null
+            onPoint(Player.OPPONENT)
+        } else {
+            pendingSingleButtonScore = scope.launch {
+                delay(280)
+                onPoint(Player.UWE)
+                pendingSingleButtonScore = null
+            }
+        }
+        return true
+    }
+
+    fun handleRotaryScore(delta: Float): Boolean {
+        if (
+            !settings.hardwareScoringEnabled ||
+            !hardwareScoringButtons.usesRotaryFallback ||
+            !isLiveScoreScreen()
+        ) {
+            return false
+        }
+
+        val now = SystemClock.uptimeMillis()
+        if (now - lastRotaryScoreAtMillis < 350) return true
+
+        val nextDelta = rotaryScoreDelta + delta
+        val threshold = 30f
+        rotaryScoreDelta = when {
+            nextDelta <= -threshold -> {
+                onPoint(Player.UWE)
+                lastRotaryScoreAtMillis = now
+                0f
+            }
+            nextDelta >= threshold -> {
+                onPoint(Player.OPPONENT)
+                lastRotaryScoreAtMillis = now
+                0f
+            }
+            else -> nextDelta
+        }
+        return true
+    }
+
+    LaunchedEffect(
+        settings.hardwareScoringEnabled,
+        screen,
+        state.currentSetIndex,
+        state.currentSet.winner,
+        state.matchWinner,
+        state.matchMode,
+    ) {
+        if (!settings.hardwareScoringEnabled || !isLiveScoreScreen()) {
+            pendingSingleButtonScore?.cancel()
+            pendingSingleButtonScore = null
+            rotaryScoreDelta = 0f
+        }
+    }
+
+    SideEffect {
+        mainActivity?.hardwareScoreKeyHandler = ::handleHardwareScoreKey
+        mainActivity?.resetAppForTests = ::resetForTests
+    }
+
     TableTennisTheme {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .onRotaryScrollEvent { event ->
+                    handleRotaryScore(event.verticalScrollPixels)
+                }
+                .focusRequester(rotaryFocusRequester)
+                .focusable()
                 .background(AppColors.background)
                 .padding(horizontal = 18.dp, vertical = 16.dp),
             contentAlignment = Alignment.Center,
@@ -387,7 +597,15 @@ fun TableTennisApp() {
             when (screen) {
                 AppScreen.SETTINGS -> SettingsScreen(
                     draft = settingsDraft,
+                    hardwareScoringDescription = hardwareScoringButtons.description,
                     onDraftChange = { settingsDraft = it },
+                    onHardwareScoringToggle = {
+                        val nextEnabled = !settingsDraft.hardwareScoringEnabled
+                        settingsDraft = settingsDraft.copy(hardwareScoringEnabled = nextEnabled)
+                        scope.launch {
+                            settingsStore.saveHardwareScoringEnabled(nextEnabled)
+                        }
+                    },
                     onSpeechInput = ::launchSpeechInput,
                     onSave = {
                         val sanitized = settingsDraft.toSettings()
@@ -418,6 +636,11 @@ fun TableTennisApp() {
                         settingsDraft = SettingsDraft.from(settings)
                         screen = AppScreen.MATCH
                     },
+                    onOpenPrivacy = { screen = AppScreen.PRIVACY },
+                )
+
+                AppScreen.PRIVACY -> PrivacyPolicyScreen(
+                    onDone = { screen = AppScreen.SETTINGS },
                 )
 
                 AppScreen.MATCH -> when {
@@ -614,10 +837,10 @@ private fun DoublesServePromptScreen(
         DoublesPromptStep.CHOOSE_PAIR -> "Choose the team that opens set $setNumber."
         DoublesPromptStep.CHOOSE_SERVER -> {
             if (setNumber == 1) {
-                "Choose the player on $servingTeamLabel who serves the first ball of set $setNumber."
+                "Choose the opening server for $servingTeamLabel."
             } else {
                 buildString {
-                    append("$servingTeamLabel receives first in this set, so choose who serves first.")
+                    append("Choose the opening server for $servingTeamLabel.")
                     derivedFirstReceiver?.let {
                         append(" First receiver: ${settings.seatName(it)}.")
                     }
@@ -629,10 +852,13 @@ private fun DoublesServePromptScreen(
 
     Column(
         modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .fillMaxWidth()
+            .padding(bottom = 8.dp)
             .testTag("doublesServePrompt"),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.Top,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -668,22 +894,22 @@ private fun DoublesServePromptScreen(
         Text(
             text = subtitle,
             color = AppColors.muted,
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 6.dp),
         )
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         when (step) {
             DoublesPromptStep.CHOOSE_SERVER -> {
                 selectableServingTeam?.let {
                     StatusPill(text = "Serving team: ${settings.displayName(it)}")
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
             DoublesPromptStep.CHOOSE_RECEIVER -> {
                 chosenServer?.let {
                     StatusPill(text = "Opening server: ${settings.seatName(it)}")
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
             DoublesPromptStep.CHOOSE_PAIR -> Unit
@@ -772,7 +998,9 @@ private fun ScoreScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         HorizontalPager(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
             state = pagerState,
             beyondViewportPageCount = 1,
             userScrollEnabled = true,
@@ -814,9 +1042,8 @@ private fun ScoreboardPage(
     val doublesReceiver = if (state.matchMode == MatchMode.DOUBLES) MatchRules.currentDoublesReceiver(state.currentSet) else null
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween,
     ) {
         HeaderRow(
             state = state,
@@ -832,35 +1059,17 @@ private fun ScoreboardPage(
             doublesReceiver = doublesReceiver,
             settings = settings,
         )
-        ScoreBoard(
+        Spacer(modifier = Modifier.height(8.dp))
+        ScoreTouchBand(
             set = state.currentSet,
             server = serverTeam,
             matchMode = state.matchMode,
             settings = settings,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            onPoint = onPoint,
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            PointButton(
-                player = Player.UWE,
-                points = state.currentSet.uwePoints,
-                settings = settings,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("pointUwe"),
-                onClick = { onPoint(Player.UWE) },
-            )
-            PointButton(
-                player = Player.OPPONENT,
-                points = state.currentSet.opponentPoints,
-                settings = settings,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("pointOpponent"),
-                onClick = { onPoint(Player.OPPONENT) },
-            )
-        }
     }
 }
 
@@ -1075,10 +1284,13 @@ private fun PagerDots(currentPage: Int) {
 @Composable
 private fun SettingsScreen(
     draft: SettingsDraft,
+    hardwareScoringDescription: String,
     onDraftChange: (SettingsDraft) -> Unit,
+    onHardwareScoringToggle: () -> Unit,
     onSpeechInput: (SpeechTarget) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
+    onOpenPrivacy: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -1179,6 +1391,23 @@ private fun SettingsScreen(
             onToggle = { onDraftChange(draft.copy(keepScreenOn = !draft.keepScreenOn)) },
         )
         Spacer(modifier = Modifier.height(8.dp))
+        SettingsToggleRow(
+            label = "Hardware scoring",
+            enabled = draft.hardwareScoringEnabled,
+            tag = "toggleHardwareScoring",
+            onToggle = onHardwareScoringToggle,
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = hardwareScoringDescription,
+            color = AppColors.muted,
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .padding(horizontal = 4.dp)
+                .testTag("hardwareScoringExplanation"),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "Match format applies on the next new match.",
             color = AppColors.muted,
@@ -1187,6 +1416,14 @@ private fun SettingsScreen(
             modifier = Modifier.padding(horizontal = 4.dp),
         )
         Spacer(modifier = Modifier.height(12.dp))
+        GhostButton(
+            label = "Privacy",
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("openPrivacyPolicy"),
+            onClick = onOpenPrivacy,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
         ActionButton(
             label = "Save",
             color = AppColors.action,
@@ -1200,6 +1437,59 @@ private fun SettingsScreen(
             label = "Cancel",
             modifier = Modifier.testTag("cancelSettings"),
             onClick = onCancel,
+        )
+    }
+}
+
+@Composable
+private fun PrivacyPolicyScreen(
+    onDone: () -> Unit,
+) {
+    val paragraphs = remember {
+        listOf(
+            "TT Score Pro stores match settings and active match state locally on your watch and phone.",
+            "When the companion phone app is connected, the watch shares the live score, set state, server, and receiver with the paired phone using the Wear OS Data Layer.",
+            "TT Score Pro does not use a developer-operated backend and does not upload your match data to our own servers.",
+            "Speech features use Android system services available on your device. Spoken names and announcements are handled by those platform components.",
+            "You can clear local app data at any time in Android system settings or by uninstalling the app.",
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .testTag("privacyPolicyScreen"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        StatusPill(text = "TT Score Pro")
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Privacy",
+            color = AppColors.text,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        paragraphs.forEach { paragraph ->
+            Text(
+                text = paragraph,
+                color = AppColors.muted,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Start,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        ActionButton(
+            label = "Done",
+            color = AppColors.action,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("closePrivacyPolicy"),
+            onClick = onDone,
         )
     }
 }
@@ -1310,20 +1600,64 @@ private fun SettingsToggleRow(
     tag: String,
     onToggle: () -> Unit,
 ) {
+    val stateText = if (enabled) "ON" else "OFF"
+    val backgroundColor = if (enabled) AppColors.action.copy(alpha = 0.18f) else AppColors.surface
+    val borderColor = if (enabled) AppColors.action else AppColors.outline
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(48.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(AppColors.surface)
-            .border(1.dp, AppColors.outline, RoundedCornerShape(8.dp))
+            .background(backgroundColor)
+            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
             .clickable(onClick = onToggle)
+            .semantics { contentDescription = "$label $stateText" }
             .padding(horizontal = 10.dp, vertical = 10.dp)
             .testTag(tag),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text = label, color = AppColors.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        StatusPill(text = if (enabled) "On" else "Off")
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(if (enabled) AppColors.action else AppColors.disabled)
+                    .padding(4.dp),
+            )
+            Text(
+                text = label,
+                color = AppColors.text,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        ToggleStatePill(text = stateText, enabled = enabled)
+    }
+}
+
+@Composable
+private fun ToggleStatePill(text: String, enabled: Boolean) {
+    Box(
+        modifier = Modifier
+            .padding(start = 8.dp)
+            .widthIn(min = 42.dp)
+            .clip(CircleShape)
+            .background(if (enabled) AppColors.action else AppColors.outline)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = if (enabled) AppColors.darkText else AppColors.muted,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
     }
 }
 
@@ -1668,45 +2002,67 @@ private fun ServerIndicator(
 }
 
 @Composable
-private fun ScoreBoard(
+private fun ScoreTouchBand(
     set: SetScore,
     server: Player?,
     matchMode: MatchMode,
     settings: AppSettings,
+    modifier: Modifier = Modifier,
+    onPoint: (Player) -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(60.dp),
+        modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ScoreColumn(Player.UWE, set.uwePoints, server == Player.UWE, settings, matchMode, Modifier.weight(1f))
-        ScoreColumn(Player.OPPONENT, set.opponentPoints, server == Player.OPPONENT, settings, matchMode, Modifier.weight(1f))
+        ScoreTouchZone(
+            player = Player.UWE,
+            points = set.uwePoints,
+            isServing = server == Player.UWE,
+            settings = settings,
+            matchMode = matchMode,
+            modifier = Modifier
+                .weight(1f)
+                .testTag("pointUwe"),
+            onClick = { onPoint(Player.UWE) },
+        )
+        ScoreTouchZone(
+            player = Player.OPPONENT,
+            points = set.opponentPoints,
+            isServing = server == Player.OPPONENT,
+            settings = settings,
+            matchMode = matchMode,
+            modifier = Modifier
+                .weight(1f)
+                .testTag("pointOpponent"),
+            onClick = { onPoint(Player.OPPONENT) },
+        )
     }
 }
 
 @Composable
-private fun ScoreColumn(
+private fun ScoreTouchZone(
     player: Player,
     points: Int,
     isServing: Boolean,
     settings: AppSettings,
     matchMode: MatchMode,
     modifier: Modifier = Modifier,
+    onClick: () -> Unit,
 ) {
     val borderColor = if (isServing) AppColors.serve else AppColors.outline
     val name = if (matchMode == MatchMode.SINGLES) settings.displayName(player) else settings.phoneTeamLabel(player)
+    val color = if (player == Player.UWE) AppColors.uwe else AppColors.opponent
     Column(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(8.dp))
-            .background(AppColors.surface)
+            .background(color.copy(alpha = 0.18f))
             .border(2.dp, borderColor, RoundedCornerShape(8.dp))
             .semantics { contentDescription = "$name score $points" }
-            .testTag(if (player == Player.UWE) "scoreUwe" else "scoreOpponent")
-            .padding(vertical = 6.dp),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.SpaceEvenly,
     ) {
         Text(
             text = name,
@@ -1718,46 +2074,19 @@ private fun ScoreColumn(
         Text(
             text = points.toString(),
             color = AppColors.text,
-            fontSize = 28.sp,
+            fontSize = 42.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
+            modifier = Modifier.testTag(if (player == Player.UWE) "scoreUwe" else "scoreOpponent"),
         )
-    }
-}
-
-@Composable
-private fun PointButton(
-    player: Player,
-    points: Int,
-    settings: AppSettings,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    val color = if (player == Player.UWE) AppColors.uwe else AppColors.opponent
-    val name = settings.displayName(player)
-    Box(
-        modifier = modifier
-            .height(60.dp)
-            .semantics { contentDescription = "Point for $name" }
-            .clip(RoundedCornerShape(8.dp))
-            .background(color)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "+ ${shortName(player, settings)}",
-                color = AppColors.darkText,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-            )
-            Text(
-                text = points.toString(),
-                color = AppColors.darkText.copy(alpha = 0.78f),
-                fontSize = 13.sp,
-            )
-        }
+        Text(
+            text = "+ ${shortName(player, settings)}",
+            color = color,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+        )
     }
 }
 

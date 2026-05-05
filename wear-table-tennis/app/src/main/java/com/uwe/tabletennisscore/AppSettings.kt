@@ -21,6 +21,7 @@ data class AppSettings(
     val hapticsEnabled: Boolean = true,
     val soundsEnabled: Boolean = true,
     val keepScreenOn: Boolean = true,
+    val hardwareScoringEnabled: Boolean = false,
 ) {
     val matchFormat: MatchFormat
         get() = MatchFormat.fromSetsToWin(setsToWinMatch)
@@ -56,6 +57,7 @@ data class AppSettings(
             hapticsEnabled: Boolean,
             soundsEnabled: Boolean,
             keepScreenOn: Boolean,
+            hardwareScoringEnabled: Boolean = false,
         ): AppSettings = sanitize(
             matchMode = MatchMode.SINGLES,
             meName = meName,
@@ -66,6 +68,7 @@ data class AppSettings(
             hapticsEnabled = hapticsEnabled,
             soundsEnabled = soundsEnabled,
             keepScreenOn = keepScreenOn,
+            hardwareScoringEnabled = hardwareScoringEnabled,
         )
 
         fun sanitize(
@@ -78,6 +81,7 @@ data class AppSettings(
             hapticsEnabled: Boolean,
             soundsEnabled: Boolean,
             keepScreenOn: Boolean,
+            hardwareScoringEnabled: Boolean = false,
         ): AppSettings = AppSettings(
             matchMode = matchMode,
             meName = meName.trim().ifBlank { "Me" },
@@ -88,6 +92,7 @@ data class AppSettings(
             hapticsEnabled = hapticsEnabled,
             soundsEnabled = soundsEnabled,
             keepScreenOn = keepScreenOn,
+            hardwareScoringEnabled = hardwareScoringEnabled,
         )
     }
 }
@@ -123,6 +128,7 @@ class AppSettingsStore(private val context: Context) {
             hapticsEnabled = prefs[Keys.hapticsEnabled] ?: true,
             soundsEnabled = prefs[Keys.soundsEnabled] ?: true,
             keepScreenOn = prefs[Keys.keepScreenOn] ?: true,
+            hardwareScoringEnabled = prefs[Keys.hardwareScoringEnabled] ?: false,
         )
     }
 
@@ -137,6 +143,13 @@ class AppSettingsStore(private val context: Context) {
             prefs[Keys.hapticsEnabled] = settings.hapticsEnabled
             prefs[Keys.soundsEnabled] = settings.soundsEnabled
             prefs[Keys.keepScreenOn] = settings.keepScreenOn
+            prefs[Keys.hardwareScoringEnabled] = settings.hardwareScoringEnabled
+        }
+    }
+
+    suspend fun saveHardwareScoringEnabled(enabled: Boolean) {
+        context.appSettingsDataStore.edit { prefs ->
+            prefs[Keys.hardwareScoringEnabled] = enabled
         }
     }
 
@@ -150,5 +163,6 @@ class AppSettingsStore(private val context: Context) {
         val hapticsEnabled = booleanPreferencesKey("haptics_enabled")
         val soundsEnabled = booleanPreferencesKey("sounds_enabled")
         val keepScreenOn = booleanPreferencesKey("keep_screen_on")
+        val hardwareScoringEnabled = booleanPreferencesKey("hardware_scoring_enabled")
     }
 }

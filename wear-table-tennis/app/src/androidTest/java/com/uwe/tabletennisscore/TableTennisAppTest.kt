@@ -1,5 +1,6 @@
 package com.uwe.tabletennisscore
 
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -9,18 +10,40 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.swipeLeft
+import androidx.wear.input.WearableButtons
+import androidx.wear.input.testing.TestWearableButtonsProvider
+import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
+import org.junit.BeforeClass
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import kotlinx.coroutines.runBlocking
 
 class TableTennisAppTest {
+    companion object {
+        @JvmStatic
+        @BeforeClass
+        fun useTestHardwareButtons() {
+            WearableButtons.setWearableButtonsProvider(
+                TestWearableButtonsProvider(
+                    mapOf(
+                        KeyEvent.KEYCODE_STEM_1 to
+                            TestWearableButtonsProvider.TestWearableButtonLocation(200f, 100f),
+                        KeyEvent.KEYCODE_STEM_2 to
+                            TestWearableButtonsProvider.TestWearableButtonLocation(200f, 220f),
+                    ),
+                ),
+            )
+        }
+    }
+
     @get:Rule
     val composeTestRule = createAndroidComposeRule<MainActivity>()
 
@@ -28,6 +51,9 @@ class TableTennisAppTest {
     fun resetSettings() {
         runBlocking {
             AppSettingsStore(composeTestRule.activity.applicationContext).save(AppSettings())
+        }
+        composeTestRule.runOnUiThread {
+            composeTestRule.activity.resetAppForTests?.invoke()
         }
         composeTestRule.waitForIdle()
     }
@@ -39,15 +65,29 @@ class TableTennisAppTest {
     }
 
     @Test
+    fun hardwareScoringDefaultsToOff() {
+        val settings = runBlocking {
+            AppSettingsStore(composeTestRule.activity.applicationContext).settings.first()
+        }
+
+        assertFalse(settings.hardwareScoringEnabled)
+    }
+
+    @Test
     fun settingsScreenOpensAndShowsDefaults() {
         composeTestRule.onNodeWithTag("openSettingsFromPrompt").performClick()
 
         composeTestRule.onNodeWithTag("settingsScreen").assertIsDisplayed()
         composeTestRule.onNodeWithText("Settings").assertIsDisplayed()
         composeTestRule.onNodeWithTag("settingsMeSpeech").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("settingsOpponentSpeech").performScrollTo()
         composeTestRule.onNodeWithTag("settingsOpponentSpeech").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("settingsScreen").performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithTag("toggleSounds").performScrollTo()
         composeTestRule.onNodeWithTag("toggleSounds").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("toggleHardwareScoring").performScrollTo()
+        composeTestRule.onNodeWithTag("toggleHardwareScoring").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("hardwareScoringExplanation").performScrollTo()
+        composeTestRule.onNodeWithTag("hardwareScoringExplanation").assertIsDisplayed()
         assertTrue(
             composeTestRule.activity.window.attributes.flags and
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0,
@@ -61,7 +101,7 @@ class TableTennisAppTest {
         composeTestRule.onNodeWithTag("settingsMeName").performTextInput("Alex")
         composeTestRule.onNodeWithTag("settingsOpponentName").performTextClearance()
         composeTestRule.onNodeWithTag("settingsOpponentName").performTextInput("Lutz")
-        composeTestRule.onNodeWithTag("settingsScreen").performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithTag("saveSettings").performScrollTo()
         composeTestRule.onNodeWithTag("saveSettings").performClick()
         composeTestRule.waitForIdle()
 
@@ -76,9 +116,67 @@ class TableTennisAppTest {
     @Test
     fun pointButtonsUpdateScore() {
         composeTestRule.onNodeWithTag("serveUwe").performClick()
+        composeTestRule.onNodeWithContentDescription("Me score 0").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Opponent score 0").assertIsDisplayed()
         composeTestRule.onNodeWithTag("pointUwe").performClick()
 
         composeTestRule.onNodeWithContentDescription("Me score 1").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Opponent score 0").assertIsDisplayed()
+    }
+
+    @Test
+    fun savingHardwareScoringTogglePersistsSetting() {
+        composeTestRule.onNodeWithTag("openSettingsFromPrompt").performClick()
+        composeTestRule.onNodeWithTag("toggleHardwareScoring").performScrollTo()
+        composeTestRule.onNodeWithContentDescription("Hardware scoring OFF").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("toggleHardwareScoring").performClick()
+        composeTestRule.onNodeWithContentDescription("Hardware scoring ON").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("saveSettings").performScrollTo()
+        composeTestRule.onNodeWithTag("saveSettings").performClick()
+        composeTestRule.waitForIdle()
+
+        val settings = runBlocking {
+            AppSettingsStore(composeTestRule.activity.applicationContext).settings.first()
+        }
+        assertTrue(settings.hardwareScoringEnabled)
+    }
+
+    @Test
+    fun stemOneScoresFirstPlayerWhenHardwareScoringIsEnabled() {
+        runBlocking {
+            AppSettingsStore(composeTestRule.activity.applicationContext)
+                .save(AppSettings(hardwareScoringEnabled = true))
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("serveUwe").performClick()
+        pressHardwareKey(KeyEvent.KEYCODE_STEM_1)
+
+        composeTestRule.onNodeWithContentDescription("Me score 1").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Opponent score 0").assertIsDisplayed()
+    }
+
+    @Test
+    fun stemTwoScoresOpponentWhenHardwareScoringIsEnabled() {
+        runBlocking {
+            AppSettingsStore(composeTestRule.activity.applicationContext)
+                .save(AppSettings(hardwareScoringEnabled = true))
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("serveUwe").performClick()
+        pressHardwareKey(KeyEvent.KEYCODE_STEM_2)
+
+        composeTestRule.onNodeWithContentDescription("Me score 0").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Opponent score 1").assertIsDisplayed()
+    }
+
+    @Test
+    fun hardwareButtonDoesNothingWhenHardwareScoringIsDisabled() {
+        composeTestRule.onNodeWithTag("serveUwe").performClick()
+        pressHardwareKey(KeyEvent.KEYCODE_STEM_1)
+
+        composeTestRule.onNodeWithContentDescription("Me score 0").assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription("Opponent score 0").assertIsDisplayed()
     }
 
@@ -94,9 +192,10 @@ class TableTennisAppTest {
     @Test
     fun bestOfFiveCanBeSelectedBeforeServe() {
         composeTestRule.onNodeWithTag("openSettingsFromPrompt").performClick()
-        composeTestRule.onNodeWithTag("settingsScreen").performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithTag("bestOf5").performScrollTo()
         composeTestRule.onNodeWithTag("bestOf5").performClick()
         composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("saveSettings").performScrollTo()
         composeTestRule.onNodeWithTag("saveSettings").performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("serveUwe").performClick()
@@ -177,8 +276,9 @@ class TableTennisAppTest {
     @Test
     fun turningAlwaysOnOffClearsWindowFlag() {
         composeTestRule.onNodeWithTag("openSettingsFromPrompt").performClick()
-        composeTestRule.onNodeWithTag("settingsScreen").performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithTag("toggleKeepScreenOn").performScrollTo()
         composeTestRule.onNodeWithTag("toggleKeepScreenOn").performClick()
+        composeTestRule.onNodeWithTag("saveSettings").performScrollTo()
         composeTestRule.onNodeWithTag("saveSettings").performClick()
         composeTestRule.waitForIdle()
 
@@ -192,7 +292,7 @@ class TableTennisAppTest {
     fun doublesModeUsesDedicatedOpeningOrderPrompt() {
         composeTestRule.onNodeWithTag("openSettingsFromPrompt").performClick()
         composeTestRule.onNodeWithTag("modeDoubles").performClick()
-        composeTestRule.onNodeWithTag("settingsScreen").performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithTag("saveSettings").performScrollTo()
         composeTestRule.onNodeWithTag("saveSettings").performClick()
         composeTestRule.waitForIdle()
 
@@ -212,7 +312,7 @@ class TableTennisAppTest {
 
         composeTestRule.onNodeWithTag("openSettings").performClick()
         composeTestRule.onNodeWithTag("modeDoubles").performClick()
-        composeTestRule.onNodeWithTag("settingsScreen").performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithTag("saveSettings").performScrollTo()
         composeTestRule.onNodeWithTag("saveSettings").performClick()
         composeTestRule.waitForIdle()
 
@@ -225,7 +325,7 @@ class TableTennisAppTest {
     fun switchingDoublesMatchBackToSinglesStartsFreshMatch() {
         composeTestRule.onNodeWithTag("openSettingsFromPrompt").performClick()
         composeTestRule.onNodeWithTag("modeDoubles").performClick()
-        composeTestRule.onNodeWithTag("settingsScreen").performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithTag("saveSettings").performScrollTo()
         composeTestRule.onNodeWithTag("saveSettings").performClick()
         composeTestRule.waitForIdle()
 
@@ -236,11 +336,18 @@ class TableTennisAppTest {
 
         composeTestRule.onNodeWithTag("openSettings").performClick()
         composeTestRule.onNodeWithTag("modeSingles").performClick()
-        composeTestRule.onNodeWithTag("settingsScreen").performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithTag("saveSettings").performScrollTo()
         composeTestRule.onNodeWithTag("saveSettings").performClick()
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("servePrompt").assertIsDisplayed()
         composeTestRule.onNodeWithText("Serve first?").assertIsDisplayed()
+    }
+
+    private fun pressHardwareKey(keyCode: Int) {
+        composeTestRule.runOnUiThread {
+            composeTestRule.activity.onKeyDown(keyCode, KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        }
+        composeTestRule.waitForIdle()
     }
 }

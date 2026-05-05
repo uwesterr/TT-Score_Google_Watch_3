@@ -51,7 +51,10 @@ The project was written with **Codex**.
   - haptics
   - sounds
   - always-on display
+  - hardware scoring controls
   - privacy policy
+- Optional hardware scoring can use watch side buttons when available, or the rotary crown fallback on devices without detected side buttons.
+- Settings toggles show clear `ON` / `OFF` states for tiny round watch screens.
 - In-match cues include:
   - serve change
   - deuce
@@ -251,6 +254,15 @@ env JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
 ANDROID_SERIAL="<CONNECT_IP:CONNECT_PORT>" \
 ./gradlew :app:installDebug
 $ADB -s <CONNECT_IP:CONNECT_PORT> shell am start -n com.uwe.tabletennisscore/.MainActivity
+```
+
+If several devices or emulators are attached, install by transport id:
+
+```bash
+$ADB devices -l
+env JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew :app:assembleDebug
+$ADB -t <TRANSPORT_ID> install -r app/build/outputs/apk/debug/app-debug.apk
+$ADB -t <TRANSPORT_ID> shell am start -n com.uwe.tabletennisscore/.MainActivity
 ```
 
 Expected result:
