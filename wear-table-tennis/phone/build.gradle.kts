@@ -1,7 +1,28 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val releaseSigningProperties = Properties().apply {
+    val localProperties = rootProject.file("local.properties")
+    if (localProperties.exists()) {
+        localProperties.inputStream().use(::load)
+    }
+}
+
+fun releaseSigningValue(key: String): String? =
+    providers.environmentVariable(key).orNull
+        ?: releaseSigningProperties.getProperty(key)
+
+val releaseStoreFile = releaseSigningValue("TT_SCORE_UPLOAD_STORE_FILE")
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseSigningValue("TT_SCORE_UPLOAD_STORE_PASSWORD"),
+    releaseSigningValue("TT_SCORE_UPLOAD_KEY_ALIAS"),
+    releaseSigningValue("TT_SCORE_UPLOAD_KEY_PASSWORD"),
+).all { !it.isNullOrBlank() } && releaseStoreFile?.let { rootProject.file(it).exists() } == true
 
 android {
     namespace = "com.uwe.tabletennisscore.phone"
@@ -11,11 +32,32 @@ android {
         applicationId = "com.uwe.tabletennisscore"
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // Keep watch and phone version names aligned, but use separate versionCode
+        // ranges so both bundles can coexist under one Play listing.
+        versionCode = 20103
+        versionName = "1.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+    }
+
+    signingConfigs {
+        create("release") {
+            if (hasReleaseSigning) {
+                storeFile = rootProject.file(requireNotNull(releaseStoreFile))
+                storePassword = releaseSigningValue("TT_SCORE_UPLOAD_STORE_PASSWORD")
+                keyAlias = releaseSigningValue("TT_SCORE_UPLOAD_KEY_ALIAS")
+                keyPassword = releaseSigningValue("TT_SCORE_UPLOAD_KEY_PASSWORD")
+            } else {
+                initWith(getByName("debug"))
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     buildFeatures {

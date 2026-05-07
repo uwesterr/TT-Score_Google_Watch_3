@@ -191,9 +191,9 @@ private data class HardwareScoringButtons(
 ) {
     val description: String
         get() = when (buttons.size) {
-            0 -> "On this watch: rotate the crown back for Me/Home, forward for Opponent/Away."
-            1 -> "On this watch: press ${buttons[0].label} once for Me/Home, twice for Opponent/Away."
-            else -> "On this watch: press ${buttons[0].label} for Me/Home and ${buttons[1].label} for Opponent/Away."
+            0 -> "On this watch: rotate the crown or bezel back for Me/Home, forward for Opponent/Away."
+            1 -> "On this watch: press ${buttons[0].label} once for Me/Home, twice for Opponent/Away. Crown or bezel rotation also works."
+            else -> "On this watch: press ${buttons[0].label} for Me/Home and ${buttons[1].label} for Opponent/Away. Crown or bezel rotation also works."
         }
 
     fun immediatePlayerFor(keyCode: Int): Player? {
@@ -208,8 +208,8 @@ private data class HardwareScoringButtons(
     fun isSingleButtonKey(keyCode: Int): Boolean =
         buttons.size == 1 && buttons[0].keyCode == keyCode
 
-    val usesRotaryFallback: Boolean
-        get() = buttons.isEmpty()
+    val acceptsRotaryInput: Boolean
+        get() = true
 
     companion object {
         private val stemKeyCandidates = listOf(
@@ -237,7 +237,15 @@ private data class HardwareScoringButtons(
             } catch (_: IllegalStateException) {
                 emptyList()
             }
-            return HardwareScoringButtons(detectedButtons)
+            val buttons = detectedButtons.ifEmpty {
+                listOf(
+                    HardwareScoringButton(
+                        keyCode = KeyEvent.KEYCODE_STEM_PRIMARY,
+                        label = "side button",
+                    ),
+                )
+            }
+            return HardwareScoringButtons(buttons)
         }
 
         private fun fallbackLabel(index: Int): String = when (index) {
@@ -499,7 +507,7 @@ fun TableTennisApp() {
             state.matchWinner == null
 
     LaunchedEffect(settings.hardwareScoringEnabled, screen, state.currentSetIndex, state.currentSet.winner, state.matchWinner) {
-        if (settings.hardwareScoringEnabled && hardwareScoringButtons.usesRotaryFallback && isLiveScoreScreen()) {
+        if (settings.hardwareScoringEnabled && hardwareScoringButtons.acceptsRotaryInput && isLiveScoreScreen()) {
             rotaryFocusRequester.requestFocus()
         }
     }
@@ -534,7 +542,7 @@ fun TableTennisApp() {
     fun handleRotaryScore(delta: Float): Boolean {
         if (
             !settings.hardwareScoringEnabled ||
-            !hardwareScoringButtons.usesRotaryFallback ||
+            !hardwareScoringButtons.acceptsRotaryInput ||
             !isLiveScoreScreen()
         ) {
             return false
@@ -544,7 +552,7 @@ fun TableTennisApp() {
         if (now - lastRotaryScoreAtMillis < 350) return true
 
         val nextDelta = rotaryScoreDelta + delta
-        val threshold = 30f
+        val threshold = 1f
         rotaryScoreDelta = when {
             nextDelta <= -threshold -> {
                 onPoint(Player.UWE)
@@ -1037,9 +1045,10 @@ private fun ScoreboardPage(
     onNewMatch: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    val isDoubles = state.matchMode == MatchMode.DOUBLES
     val serverTeam = MatchRules.currentServer(state)
-    val doublesServer = if (state.matchMode == MatchMode.DOUBLES) MatchRules.currentDoublesServer(state.currentSet) else null
-    val doublesReceiver = if (state.matchMode == MatchMode.DOUBLES) MatchRules.currentDoublesReceiver(state.currentSet) else null
+    val doublesServer = if (isDoubles) MatchRules.currentDoublesServer(state.currentSet) else null
+    val doublesReceiver = if (isDoubles) MatchRules.currentDoublesReceiver(state.currentSet) else null
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -1059,15 +1068,16 @@ private fun ScoreboardPage(
             doublesReceiver = doublesReceiver,
             settings = settings,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(if (isDoubles) 4.dp else 8.dp))
         ScoreTouchBand(
             set = state.currentSet,
             server = serverTeam,
             matchMode = state.matchMode,
             settings = settings,
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
+                .fillMaxWidth(if (isDoubles) 0.88f else 1f)
+                .weight(1f)
+                .padding(bottom = if (isDoubles) 18.dp else 0.dp),
             onPoint = onPoint,
         )
     }
@@ -1979,25 +1989,34 @@ private fun ServerIndicator(
         MatchMode.DOUBLES -> {
             val serverName = doublesServer?.let(settings::seatName) ?: "-"
             val receiverName = doublesReceiver?.let(settings::seatName) ?: "-"
-            "Server: $serverName\nReceiver: $receiverName"
+            "$serverName -> $receiverName"
+        }
+    }
+    val contentDescription = when (matchMode) {
+        MatchMode.SINGLES -> text
+        MatchMode.DOUBLES -> {
+            val serverName = doublesServer?.let(settings::seatName) ?: "-"
+            val receiverName = doublesReceiver?.let(settings::seatName) ?: "-"
+            "Serving: $serverName. Receiving: $receiverName."
         }
     }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (matchMode == MatchMode.DOUBLES) 40.dp else 28.dp)
+            .height(if (matchMode == MatchMode.DOUBLES) 32.dp else 28.dp)
             .clip(CircleShape)
             .background(AppColors.surface)
-            .semantics { contentDescription = text }
+            .semantics { this.contentDescription = contentDescription }
             .testTag("serverIndicator"),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
             color = AppColors.text,
-            fontSize = if (matchMode == MatchMode.DOUBLES) 10.sp else 13.sp,
+            fontSize = if (matchMode == MatchMode.DOUBLES) 12.sp else 13.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
+            maxLines = 1,
         )
     }
 }
@@ -2011,6 +2030,14 @@ private fun ScoreTouchBand(
     modifier: Modifier = Modifier,
     onPoint: (Player) -> Unit,
 ) {
+    val doublesServer = if (matchMode == MatchMode.DOUBLES) MatchRules.currentDoublesServer(set) else null
+    val doublesReceiver = if (matchMode == MatchMode.DOUBLES) MatchRules.currentDoublesReceiver(set) else null
+    fun doublesRoleName(player: Player): String? = when (player) {
+        doublesServer?.team -> doublesServer?.let(settings::seatName)
+        doublesReceiver?.team -> doublesReceiver?.let(settings::seatName)
+        else -> null
+    }
+
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -2021,6 +2048,7 @@ private fun ScoreTouchBand(
             isServing = server == Player.UWE,
             settings = settings,
             matchMode = matchMode,
+            doublesRoleName = doublesRoleName(Player.UWE),
             modifier = Modifier
                 .weight(1f)
                 .testTag("pointUwe"),
@@ -2032,6 +2060,7 @@ private fun ScoreTouchBand(
             isServing = server == Player.OPPONENT,
             settings = settings,
             matchMode = matchMode,
+            doublesRoleName = doublesRoleName(Player.OPPONENT),
             modifier = Modifier
                 .weight(1f)
                 .testTag("pointOpponent"),
@@ -2047,47 +2076,63 @@ private fun ScoreTouchZone(
     isServing: Boolean,
     settings: AppSettings,
     matchMode: MatchMode,
+    doublesRoleName: String?,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val borderColor = if (isServing) AppColors.serve else AppColors.outline
-    val name = if (matchMode == MatchMode.SINGLES) settings.displayName(player) else settings.phoneTeamLabel(player)
+    val semanticName = if (matchMode == MatchMode.SINGLES) {
+        settings.displayName(player)
+    } else {
+        settings.phoneTeamLabel(player)
+    }
+    val displayName = if (matchMode == MatchMode.SINGLES) semanticName else doublesRoleName.orEmpty()
     val color = if (player == Player.UWE) AppColors.uwe else AppColors.opponent
+    val isDoubles = matchMode == MatchMode.DOUBLES
     Column(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(8.dp))
             .background(color.copy(alpha = 0.18f))
             .border(2.dp, borderColor, RoundedCornerShape(8.dp))
-            .semantics { contentDescription = "$name score $points" }
+            .semantics { contentDescription = "$semanticName score $points" }
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 8.dp),
+            .padding(horizontal = 4.dp, vertical = if (isDoubles) 6.dp else 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceEvenly,
+        verticalArrangement = if (isDoubles) Arrangement.Center else Arrangement.SpaceEvenly,
     ) {
-        Text(
-            text = name,
-            color = AppColors.muted,
-            fontSize = if (matchMode == MatchMode.SINGLES) 12.sp else 10.sp,
-            maxLines = if (matchMode == MatchMode.SINGLES) 1 else 2,
-            textAlign = TextAlign.Center,
-        )
+        if (displayName.isNotBlank()) {
+            Text(
+                text = displayName,
+                color = AppColors.muted,
+                fontSize = if (isDoubles) 12.sp else 12.sp,
+                lineHeight = if (isDoubles) 14.sp else 14.sp,
+                maxLines = 1,
+                textAlign = TextAlign.Center,
+            )
+        }
+        if (isDoubles && displayName.isNotBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+        }
         Text(
             text = points.toString(),
             color = AppColors.text,
-            fontSize = 42.sp,
+            fontSize = if (isDoubles) 40.sp else 42.sp,
+            lineHeight = if (isDoubles) 44.sp else 42.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             modifier = Modifier.testTag(if (player == Player.UWE) "scoreUwe" else "scoreOpponent"),
         )
-        Text(
-            text = "+ ${shortName(player, settings)}",
-            color = color,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-        )
+        if (!isDoubles) {
+            Text(
+                text = "+ ${shortName(player, settings)}",
+                color = color,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+            )
+        }
     }
 }
 

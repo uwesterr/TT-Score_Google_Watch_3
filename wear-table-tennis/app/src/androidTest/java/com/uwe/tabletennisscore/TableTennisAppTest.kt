@@ -302,7 +302,7 @@ class TableTennisAppTest {
         composeTestRule.onNodeWithTag("doublesServerH1").performClick()
         composeTestRule.onNodeWithTag("doublesReceiverA1").performClick()
 
-        composeTestRule.onNodeWithText("Server: Me\nReceiver: Opponent").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Me -> Opponent").assertIsDisplayed()
     }
 
     @Test

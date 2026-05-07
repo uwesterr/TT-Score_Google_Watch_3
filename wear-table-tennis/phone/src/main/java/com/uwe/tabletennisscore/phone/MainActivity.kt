@@ -15,6 +15,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
@@ -23,7 +24,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,6 +56,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -91,6 +92,7 @@ class MainActivity : ComponentActivity() {
 private enum class PhoneScreen {
     SCOREBOARD,
     SETTINGS,
+    PRIVACY,
 }
 
 private enum class PhoneDisplayMode {
@@ -135,8 +137,8 @@ private data class CompanionScoreSnapshot(
     fun roleTextForTeam(teamCode: String): String? {
         if (matchMode != PhoneMatchMode.DOUBLES) return null
         return when (teamCode) {
-            currentServerTeamCode -> currentServerName.ifBlank { null }?.let { "Server: $it" }
-            receiverTeamCode() -> currentReceiverName.ifBlank { null }?.let { "Receiver: $it" }
+            currentServerTeamCode -> currentServerName.ifBlank { null }
+            receiverTeamCode() -> currentReceiverName.ifBlank { null }
             else -> null
         }
     }
@@ -180,7 +182,8 @@ private data class PhoneConfettiParticle(
 )
 
 private data class PhoneUiSettings(
-    val soundsEnabled: Boolean = true,
+    val jinglesEnabled: Boolean = true,
+    val speechEnabled: Boolean = true,
     val speechLanguage: PhoneSpeechLanguage = PhoneSpeechLanguage.GERMAN,
 )
 
@@ -296,16 +299,29 @@ private class PhoneSettingsStore(context: Context) {
     private val preferences: SharedPreferences =
         context.applicationContext.getSharedPreferences(PHONE_SETTINGS_PREFS, Context.MODE_PRIVATE)
 
-    fun load(): PhoneUiSettings = PhoneUiSettings(
-        soundsEnabled = preferences.getBoolean(PREF_SOUNDS_ENABLED, true),
-        speechLanguage = PhoneSpeechLanguage.entries.firstOrNull {
-            it.name == preferences.getString(PREF_SPEECH_LANGUAGE, PhoneSpeechLanguage.GERMAN.name)
-        } ?: PhoneSpeechLanguage.GERMAN,
-    )
+    fun load(): PhoneUiSettings {
+        val legacySoundsEnabled = preferences.getBoolean(PREF_SOUNDS_ENABLED, true)
+        return PhoneUiSettings(
+            jinglesEnabled = if (preferences.contains(PREF_JINGLES_ENABLED)) {
+                preferences.getBoolean(PREF_JINGLES_ENABLED, true)
+            } else {
+                legacySoundsEnabled
+            },
+            speechEnabled = if (preferences.contains(PREF_SPEECH_ENABLED)) {
+                preferences.getBoolean(PREF_SPEECH_ENABLED, true)
+            } else {
+                legacySoundsEnabled
+            },
+            speechLanguage = PhoneSpeechLanguage.entries.firstOrNull {
+                it.name == preferences.getString(PREF_SPEECH_LANGUAGE, PhoneSpeechLanguage.GERMAN.name)
+            } ?: PhoneSpeechLanguage.GERMAN,
+        )
+    }
 
     fun save(settings: PhoneUiSettings) {
         preferences.edit()
-            .putBoolean(PREF_SOUNDS_ENABLED, settings.soundsEnabled)
+            .putBoolean(PREF_JINGLES_ENABLED, settings.jinglesEnabled)
+            .putBoolean(PREF_SPEECH_ENABLED, settings.speechEnabled)
             .putString(PREF_SPEECH_LANGUAGE, settings.speechLanguage.name)
             .apply()
     }
@@ -407,8 +423,8 @@ private fun CompanionPhoneApp() {
         speechPlayer.setLanguage(phoneSettings.speechLanguage)
     }
 
-    LaunchedEffect(phoneSettings.soundsEnabled) {
-        if (!phoneSettings.soundsEnabled) {
+    LaunchedEffect(phoneSettings.speechEnabled) {
+        if (!phoneSettings.speechEnabled) {
             speechPlayer.stop()
         }
     }
@@ -418,7 +434,7 @@ private fun CompanionPhoneApp() {
         consumedToken = consumedEffectToken,
         onConsumeEffect = { consumedEffectToken = it },
         onPlayEffect = { effectType ->
-            if (phoneSettings.soundsEnabled) {
+            if (phoneSettings.jinglesEnabled) {
                 soundPlayer.play(effectType)
             }
         },
@@ -429,7 +445,7 @@ private fun CompanionPhoneApp() {
         consumedKey = consumedSpeechKey,
         onConsume = { consumedSpeechKey = it },
         onSpeak = { announcement ->
-            if (phoneSettings.soundsEnabled) {
+            if (phoneSettings.speechEnabled) {
                 speechPlayer.speak(announcement)
             }
         },
@@ -466,7 +482,13 @@ private fun CompanionPhoneApp() {
                             phoneSettings = updated
                             settingsStore.save(updated)
                         },
+                        onOpenPrivacy = { screen = PhoneScreen.PRIVACY },
                         onDone = { screen = PhoneScreen.SCOREBOARD },
+                    )
+                }
+                PhoneScreen.PRIVACY -> {
+                    PhonePrivacyPolicyScreen(
+                        onDone = { screen = PhoneScreen.SETTINGS },
                     )
                 }
             }
@@ -693,7 +715,9 @@ private fun LandscapeCompanionScoreLayout(
         }
 
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             if (snapshot.isSetComplete || snapshot.isMatchComplete) {
@@ -724,6 +748,14 @@ private fun LandscapeCompanionScoreLayout(
                         compact = true,
                     )
                 }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.BottomEnd,
+            ) {
+                PhoneScoreCornerLogo()
             }
         }
     }
@@ -842,10 +874,26 @@ private fun LandscapeScoreboardModeLayout(
             if (snapshot.isSetComplete || snapshot.isMatchComplete) {
                 ResultCard(snapshot = snapshot, setScore = setScore)
             } else {
-                Spacer(modifier = Modifier.size(1.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.BottomEnd,
+                ) {
+                    PhoneScoreCornerLogo()
+                }
             }
         }
     }
+}
+
+@Composable
+private fun PhoneScoreCornerLogo() {
+    Image(
+        painter = painterResource(id = R.drawable.app_logo),
+        contentDescription = null,
+        modifier = Modifier.size(112.dp),
+    )
 }
 
 @Composable
@@ -911,6 +959,7 @@ private fun ScoreboardModeHeader(
 private fun PhoneSettingsScreen(
     settings: PhoneUiSettings,
     onSettingsChange: (PhoneUiSettings) -> Unit,
+    onOpenPrivacy: () -> Unit,
     onDone: () -> Unit,
 ) {
     Box(
@@ -926,7 +975,7 @@ private fun PhoneSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             Text(
-                text = "Phone settings",
+                text = "Settings",
                 color = Color.White,
                 fontSize = 34.sp,
                 fontWeight = FontWeight.Bold,
@@ -942,21 +991,51 @@ private fun PhoneSettingsScreen(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "Sounds",
+                            text = "Jingles",
                             color = Color.White,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = "Turn all phone-side jingles and speech on or off.",
+                            text = "Play result sounds for sets and matches.",
                             color = Color(0xFF9CA3AF),
                             fontSize = 16.sp,
                         )
                     }
                     Switch(
-                        checked = settings.soundsEnabled,
+                        checked = settings.jinglesEnabled,
                         onCheckedChange = { enabled ->
-                            onSettingsChange(settings.copy(soundsEnabled = enabled))
+                            onSettingsChange(settings.copy(jinglesEnabled = enabled))
+                        },
+                    )
+                }
+            }
+            Card(shape = RoundedCornerShape(24.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF18212B))
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Speech",
+                            color = Color.White,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "Speak scores and match cues.",
+                            color = Color(0xFF9CA3AF),
+                            fontSize = 16.sp,
+                        )
+                    }
+                    Switch(
+                        checked = settings.speechEnabled,
+                        onCheckedChange = { enabled ->
+                            onSettingsChange(settings.copy(speechEnabled = enabled))
                         },
                     )
                 }
@@ -971,13 +1050,13 @@ private fun PhoneSettingsScreen(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "Speech language",
+                            text = "Language",
                             color = Color.White,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = "Choose whether the phone speaks German or English.",
+                            text = "Choose the spoken language.",
                             color = Color(0xFF9CA3AF),
                             fontSize = 16.sp,
                         )
@@ -1002,6 +1081,63 @@ private fun PhoneSettingsScreen(
                         )
                     }
                 }
+            }
+            OutlinedButton(
+                onClick = onOpenPrivacy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Privacy policy")
+            }
+            Button(
+                onClick = onDone,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Done")
+            }
+            Box(modifier = Modifier.padding(bottom = 12.dp))
+        }
+    }
+}
+
+@Composable
+private fun PhonePrivacyPolicyScreen(
+    onDone: () -> Unit,
+) {
+    val paragraphs = remember {
+        listOf(
+            "TT Score Pro stores match settings and active match state locally on your watch and phone.",
+            "When the companion phone app is connected, the watch shares the live score, set state, server, and receiver with the paired phone using the Wear OS Data Layer.",
+            "TT Score Pro does not use a developer-operated backend and does not upload your match data to our own servers.",
+            "Speech features use Android system services available on your device. Spoken names and announcements are handled by those platform components.",
+            "You can clear local app data at any time in Android system settings or by uninstalling the app.",
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Color(0xFF05070A), Color(0xFF101820)))),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = "Privacy policy",
+                color = Color.White,
+                fontSize = 34.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            paragraphs.forEach { paragraph ->
+                Text(
+                    text = paragraph,
+                    color = Color(0xFFD1D5DB),
+                    fontSize = 18.sp,
+                    lineHeight = 26.sp,
+                )
             }
             Button(
                 onClick = onDone,
@@ -1050,6 +1186,29 @@ private fun ServingCard(
     compact: Boolean = false,
 ) {
     Card(shape = RoundedCornerShape(24.dp)) {
+        if (receiverName != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF10243A))
+                    .padding(
+                        horizontal = if (compact) 18.dp else 20.dp,
+                        vertical = if (compact) 16.dp else 20.dp,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "$serverName -> $receiverName",
+                    color = Color.White,
+                    fontSize = if (compact) 23.sp else 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+            }
+            return@Card
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1058,7 +1217,7 @@ private fun ServingCard(
                     horizontal = if (compact) 18.dp else 20.dp,
                     vertical = if (compact) 14.dp else 16.dp,
                 ),
-            verticalArrangement = Arrangement.spacedBy(if (receiverName == null) 0.dp else 8.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1066,7 +1225,7 @@ private fun ServingCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Server",
+                    text = "Serving",
                     color = Color(0xFF93C5FD),
                     fontSize = if (compact) 16.sp else 18.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -1078,27 +1237,6 @@ private fun ServingCard(
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.End,
                 )
-            }
-            receiverName?.let { activeReceiver ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Receiver",
-                        color = Color(0xFF9CA3AF),
-                        fontSize = if (compact) 14.sp else 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = activeReceiver,
-                        color = Color.White,
-                        fontSize = if (compact) 18.sp else 20.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.End,
-                    )
-                }
             }
         }
     }
@@ -1540,6 +1678,7 @@ private fun RowScope.LandscapeScoreTile(
     isServing: Boolean,
     roleText: String?,
 ) {
+    val displayLabel = roleText ?: label
     Column(
         modifier = Modifier
             .weight(1f)
@@ -1559,32 +1698,24 @@ private fun RowScope.LandscapeScoreTile(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = label,
+                text = displayLabel,
                 color = Color(0xFFD1D5DB),
-                fontSize = if ('\n' in label) 22.sp else 28.sp,
+                fontSize = when {
+                    roleText != null -> 30.sp
+                    '\n' in label -> 22.sp
+                    else -> 28.sp
+                },
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
-                maxLines = if ('\n' in label) 2 else 1,
+                maxLines = if ('\n' in displayLabel) 2 else 1,
             )
-            when {
-                roleText != null -> {
-                    Text(
-                        text = roleText,
-                        color = accent,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                    )
-                }
-                isServing -> {
-                    Text(
-                        text = "SERVING",
-                        color = accent,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
+            if (roleText == null && isServing) {
+                Text(
+                    text = "SERVING",
+                    color = accent,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
         Text(
@@ -1605,6 +1736,7 @@ private fun RowScope.ScoreboardLandscapeScoreTile(
     isServing: Boolean,
     roleText: String?,
 ) {
+    val displayLabel = roleText ?: label
     Column(
         modifier = Modifier
             .weight(1f)
@@ -1624,32 +1756,24 @@ private fun RowScope.ScoreboardLandscapeScoreTile(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = label,
+                text = displayLabel,
                 color = Color(0xFFD1D5DB),
-                fontSize = if ('\n' in label) 20.sp else 24.sp,
+                fontSize = when {
+                    roleText != null -> 30.sp
+                    '\n' in label -> 20.sp
+                    else -> 24.sp
+                },
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
-                maxLines = if ('\n' in label) 2 else 1,
+                maxLines = if ('\n' in displayLabel) 2 else 1,
             )
-            when {
-                roleText != null -> {
-                    Text(
-                        text = roleText,
-                        color = accent,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                    )
-                }
-                isServing -> {
-                    Text(
-                        text = "SERVING",
-                        color = accent,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
+            if (roleText == null && isServing) {
+                Text(
+                    text = "SERVING",
+                    color = accent,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
         Text(
@@ -1670,6 +1794,7 @@ private fun RowScope.ScoreTile(
     isServing: Boolean,
     roleText: String?,
 ) {
+    val displayLabel = roleText ?: label
     Column(
         modifier = Modifier
             .weight(1f)
@@ -1684,31 +1809,24 @@ private fun RowScope.ScoreTile(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            text = label,
+            text = displayLabel,
             color = Color(0xFFD1D5DB),
-            fontSize = if ('\n' in label) 18.sp else 22.sp,
+            fontSize = when {
+                roleText != null -> 23.sp
+                '\n' in label -> 18.sp
+                else -> 22.sp
+            },
+            fontWeight = if (roleText != null) FontWeight.SemiBold else FontWeight.Normal,
             textAlign = TextAlign.Center,
-            maxLines = if ('\n' in label) 2 else 1,
+            maxLines = if ('\n' in displayLabel) 2 else 1,
         )
-        when {
-            roleText != null -> {
-                Text(
-                    text = roleText,
-                    color = accent,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                )
-            }
-            isServing -> {
-                Text(
-                    text = "SERVING",
-                    color = accent,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+        if (roleText == null && isServing) {
+            Text(
+                text = "SERVING",
+                color = accent,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
         Text(
             text = value,
@@ -1788,4 +1906,6 @@ private object CompanionScoreKeys {
 
 private const val PHONE_SETTINGS_PREFS = "tt_score_phone_settings"
 private const val PREF_SOUNDS_ENABLED = "sounds_enabled"
+private const val PREF_JINGLES_ENABLED = "jingles_enabled"
+private const val PREF_SPEECH_ENABLED = "speech_enabled"
 private const val PREF_SPEECH_LANGUAGE = "speech_language"

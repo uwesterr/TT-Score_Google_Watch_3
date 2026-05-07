@@ -34,8 +34,8 @@ android {
         targetSdk = 35
         // Keep watch and phone version names aligned, but use separate versionCode
         // ranges so both bundles can coexist under one Play listing.
-        versionCode = 30102
-        versionName = "1.0.1"
+        versionCode = 30104
+        versionName = "1.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
