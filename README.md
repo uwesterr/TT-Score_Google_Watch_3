@@ -24,16 +24,15 @@ The project was written with **Codex**.
 ### Watch
 
 <p>
-  <img src="wear-table-tennis/docs/readme-watch-serve-first.png" alt="TT Score Pro watch first-server prompt" width="32%">
-  <img src="wear-table-tennis/docs/emulator-screenshot-nine-nine.png" alt="TT Score Pro watch live match screen" width="32%">
-  <img src="wear-table-tennis/docs/readme-watch-settings.png" alt="TT Score Pro watch settings" width="32%">
+  <img src="wear-table-tennis/docs/readme-watch-singles-9-8.png" alt="TT Score Pro watch singles scoring screen with Uwe leading Lutz 9-8" width="48%">
+  <img src="wear-table-tennis/docs/readme-watch-doubles-9-9.png" alt="TT Score Pro watch doubles scoring screen with Lutz and Andi against Harte and Peter at 9-9" width="48%">
 </p>
 
 ### Phone Companion
 
 <p>
-  <img src="wear-table-tennis/docs/readme-phone-standard.png" alt="TT Score Pro phone standard companion screen" width="48%">
-  <img src="wear-table-tennis/docs/readme-phone-doubles.png" alt="TT Score Pro phone doubles companion screen" width="48%">
+  <img src="wear-table-tennis/docs/readme-phone-singles-9-8.png" alt="TT Score Pro phone singles scoring screen with Uwe leading Lutz 9-8" width="48%">
+  <img src="wear-table-tennis/docs/readme-phone-doubles-9-9.png" alt="TT Score Pro phone doubles scoring screen with Lutz and Andi against Harte and Peter at 9-9" width="48%">
 </p>
 
 ## Current UI
